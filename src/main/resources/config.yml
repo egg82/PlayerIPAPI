@@ -1,0 +1,29 @@
+mysql:
+  # MySQL address
+  address: '127.0.0.1'
+  # MySQL port
+  port: 3306
+  # MySQL user
+  user: 
+  # MySQL pass
+  pass: 
+  # MySQL database name
+  database: 'ipapi'
+  # Number of connection threads to use. Cannot be lower than 1
+  threads: 1
+sqlite:
+  # SQLite database file name
+  file: 'ipapi.db'
+  # Number of connection threads to use. Cannot be lower than 1
+  threads: 1
+
+redis:
+  # Redis address, if used
+  address: '127.0.0.1'
+  # Redis port, if used
+  port: 6379
+  # Redis pass, if used
+  pass: 
+
+# The amount of time before in-memory IPs expire after non-use
+cacheTime: 12hours
