@@ -1,5 +1,7 @@
 package me.egg82.ipapi;
 
+import java.io.File;
+
 import me.egg82.ipapi.sql.mysql.CreateTablesMySQLCommand;
 import me.egg82.ipapi.sql.sqlite.CreateTablesSQLiteCommand;
 import ninja.egg82.bukkit.BasePlugin;
@@ -9,7 +11,6 @@ import ninja.egg82.patterns.registries.IVariableRegistry;
 import ninja.egg82.sql.ISQL;
 import ninja.egg82.sql.MySQL;
 import ninja.egg82.sql.SQLite;
-import ninja.egg82.utils.FileUtil;
 import redis.clients.jedis.Jedis;
 
 public class Loaders {
@@ -49,7 +50,7 @@ public class Loaders {
 			&& configRegistry.hasRegister("sqlite.threads")
 		) {
 			sql = new SQLite(configRegistry.getRegister("sqlite.threads", Number.class).intValue(), plugin.getName(), plugin.getClass().getClassLoader());
-			sql.connect(plugin.getDataFolder().getAbsolutePath() + FileUtil.DIRECTORY_SEPARATOR_CHAR + configRegistry.getRegister("sqlite.file", String.class));
+			sql.connect(new File(plugin.getDataFolder(), configRegistry.getRegister("sqlite.file", String.class)).getAbsolutePath());
 			ServiceLocator.provideService(sql);
 			new CreateTablesSQLiteCommand().start();
 		} else {

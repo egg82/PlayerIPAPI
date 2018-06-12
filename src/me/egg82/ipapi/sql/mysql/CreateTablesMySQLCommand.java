@@ -47,11 +47,11 @@ public class CreateTablesMySQLCommand extends Command {
 			
 			sql.query(
 				"CREATE TABLE `player_to_ip` ("
-						+ "`uuid` TINYTEXT NOT NULL,"
+						+ "`uuid` VARCHAR(255) NOT NULL,"
 						+ "`ips` LONGTEXT NOT NULL"
 				+ ");"
 			);
-			sql.query("ALTER TABLE `player_to_ip` ADD PRIMARY KEY (`uuid`(255));");
+			sql.query("ALTER TABLE `player_to_ip` ADD PRIMARY KEY (`uuid`);");
 		} else if (e.getUuid().equals(ipToPlayerQuery)) {
 			if (e.getData().data.length > 0 && e.getData().data[0].length > 0 && ((Number) e.getData().data[0][0]).intValue() != 0) {
 				sql.onError().detatch(sqlError);
@@ -61,11 +61,11 @@ public class CreateTablesMySQLCommand extends Command {
 			
 			sql.query(
 				"CREATE TABLE `ip_to_player` ("
-						+ "`ip` TINYTEXT NOT NULL,"
+						+ "`ip` VARCHAR(255) NOT NULL,"
 						+ "`uuids` LONGTEXT NOT NULL"
 				+ ");"
 			);
-			finalQuery = sql.query("ALTER TABLE `ip_to_player` ADD PRIMARY KEY (`ip`(255));");
+			finalQuery = sql.query("ALTER TABLE `ip_to_player` ADD PRIMARY KEY (`ip`);");
 		} else if (e.getUuid().equals(finalQuery)) {
 			sql.onError().detatch(sqlError);
 			sql.onData().detatch(sqlError);

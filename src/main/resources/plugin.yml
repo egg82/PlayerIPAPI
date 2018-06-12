@@ -1,6 +1,6 @@
 name: PlayerIPAPI
 main: me.egg82.ipapi.PlayerIPAPI
-version: 1.0.0
+version: 1.0.1
 author: egg82
 description: API that logs player/IP combos and allows for a nice developer API to easily retrieve that data
 commands:

@@ -10,16 +10,16 @@ mysql:
   # MySQL database name
   database: 'ipapi'
   # Number of connection threads to use. Cannot be lower than 1
-  threads: 1
+  threads: 2
 sqlite:
   # SQLite database file name
   file: 'ipapi.db'
   # Number of connection threads to use. Cannot be lower than 1
-  threads: 1
+  threads: 2
 
 redis:
   # Redis address, if used
-  address: '127.0.0.1'
+  address: 
   # Redis port, if used
   port: 6379
   # Redis pass, if used
