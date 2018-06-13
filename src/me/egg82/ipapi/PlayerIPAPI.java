@@ -5,6 +5,7 @@ import java.util.logging.Level;
 
 import org.bukkit.ChatColor;
 
+import me.egg82.ipapi.core.RedisSubscriber;
 import ninja.egg82.bukkit.BasePlugin;
 import ninja.egg82.bukkit.processors.CommandProcessor;
 import ninja.egg82.bukkit.processors.EventProcessor;
@@ -16,12 +17,14 @@ import ninja.egg82.exceptionHandlers.RollbarExceptionHandler;
 import ninja.egg82.exceptionHandlers.builders.GameAnalyticsBuilder;
 import ninja.egg82.exceptionHandlers.builders.RollbarBuilder;
 import ninja.egg82.patterns.ServiceLocator;
+import ninja.egg82.patterns.registries.IVariableRegistry;
 import ninja.egg82.plugin.messaging.IMessageHandler;
 import ninja.egg82.plugin.utils.PluginReflectUtil;
 import ninja.egg82.sql.ISQL;
 import ninja.egg82.utils.FileUtil;
 import ninja.egg82.utils.ThreadUtil;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 
 public class PlayerIPAPI extends BasePlugin {
 	//vars
@@ -64,17 +67,44 @@ public class PlayerIPAPI extends BasePlugin {
 		
 		ServiceLocator.getService(ConfigRegistry.class).load(YamlUtil.getOrLoadDefaults(getDataFolder().getAbsolutePath() + FileUtil.DIRECTORY_SEPARATOR_CHAR + "config.yml", "config.yml", true));
 		
+		List<IMessageHandler> services = ServiceLocator.removeServices(IMessageHandler.class);
+		for (IMessageHandler handler : services) {
+			try {
+				handler.close();
+			} catch (Exception ex) {
+				
+			}
+		}
+		
 		Loaders.loadRedis();
+		Loaders.loadRabbit();
 		Loaders.loadStorage();
 	}
 	
+	@SuppressWarnings("resource")
 	public void onEnable() {
 		super.onEnable();
 		
 		numCommands = ServiceLocator.getService(CommandProcessor.class).addHandlersFromPackage("me.egg82.ipapi.commands", PluginReflectUtil.getCommandMapFromPackage("me.egg82.ipapi.commands", false, null, "Command"), false);
 		numEvents = ServiceLocator.getService(EventProcessor.class).addHandlersFromPackage("me.egg82.ipapi.events");
-		numMessages = ServiceLocator.getService(IMessageHandler.class).addHandlersFromPackage("me.egg82.ipapi.messages");
+		if (ServiceLocator.hasService(IMessageHandler.class)) {
+			numMessages = ServiceLocator.getService(IMessageHandler.class).addHandlersFromPackage("me.egg82.ipapi.messages");
+		}
 		numTicks = PluginReflectUtil.addServicesFromPackage("me.egg82.ipapi.ticks", false);
+		
+		ThreadUtil.submit(new Runnable() {
+			public void run() {
+				IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
+				JedisPool redisPool = ServiceLocator.getService(JedisPool.class);
+				if (redisPool != null) {
+					Jedis redis = redisPool.getResource();
+					if (configRegistry.hasRegister("redis.pass")) {
+						redis.auth(configRegistry.getRegister("redis.pass", String.class));
+					}
+					redis.subscribe(new RedisSubscriber(), "pipapi");
+				}
+			}
+		});
 		
 		enableMessage();
 		
@@ -94,6 +124,10 @@ public class PlayerIPAPI extends BasePlugin {
 		Jedis redis = ServiceLocator.getService(Jedis.class);
 		if (redis != null) {
 			redis.close();
+		}
+		JedisPool jedisPool = ServiceLocator.getService(JedisPool.class);
+		if (jedisPool != null) {
+			jedisPool.close();
 		}
 		
 		List<IMessageHandler> services = ServiceLocator.removeServices(IMessageHandler.class);

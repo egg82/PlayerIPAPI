@@ -3,7 +3,6 @@ package me.egg82.ipapi.events;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -23,18 +22,22 @@ import me.egg82.ipapi.sql.mysql.UpdateIPMySQLCommand;
 import me.egg82.ipapi.sql.mysql.UpdateUUIDMySQLCommand;
 import me.egg82.ipapi.sql.sqlite.UpdateIPSQLiteCommand;
 import me.egg82.ipapi.sql.sqlite.UpdateUUIDSQLiteCommand;
+import me.egg82.ipapi.utils.PlayerChannelUtil;
+import ninja.egg82.bukkit.services.ConfigRegistry;
 import ninja.egg82.enums.BaseSQLType;
 import ninja.egg82.exceptionHandlers.IExceptionHandler;
 import ninja.egg82.patterns.ServiceLocator;
 import ninja.egg82.patterns.registries.IRegistry;
+import ninja.egg82.patterns.registries.IVariableRegistry;
 import ninja.egg82.plugin.handlers.events.LowEventHandler;
+import ninja.egg82.plugin.messaging.IMessageHandler;
 import ninja.egg82.sql.ISQL;
+import ninja.egg82.utils.ThreadUtil;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 
 public class PlayerLoginIPGet extends LowEventHandler<PlayerJoinEvent> {
 	//vars
-	private IRegistry<UUID, Set<String>> playerToIpRegistry = ServiceLocator.getService(PlayerToIPRegistry.class);
-	private IRegistry<String, Set<UUID>> ipToPlayerRegistry = ServiceLocator.getService(IPToPlayerRegistry.class);
 	
 	//constructor
 	public PlayerLoginIPGet() {
@@ -44,6 +47,7 @@ public class PlayerLoginIPGet extends LowEventHandler<PlayerJoinEvent> {
 	//public
 	
 	//private
+	@SuppressWarnings("resource")
 	protected void onExecute(long elapsedMilliseconds) {
 		UUID uuid = event.getPlayer().getUniqueId();
 		String ip = getIp(event.getPlayer());
@@ -54,6 +58,25 @@ public class PlayerLoginIPGet extends LowEventHandler<PlayerJoinEvent> {
 		
 		setIp(uuid, ip);
 		setUuid(ip, uuid);
+		
+		if (ServiceLocator.hasService(IMessageHandler.class)) {
+			PlayerChannelUtil.broadcastInfo(uuid, ip);
+		}
+		
+		ThreadUtil.submit(new Runnable() {
+			public void run() {
+				IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
+				JedisPool redisPool = ServiceLocator.getService(JedisPool.class);
+				if (redisPool != null) {
+					Jedis redis = redisPool.getResource();
+					if (configRegistry.hasRegister("redis.pass")) {
+						redis.auth(configRegistry.getRegister("redis.pass", String.class));
+					}
+					redis.publish("pipapi", uuid.toString() + "," + ip);
+					redis.close();
+				}
+			}
+		});
 	}
 	
 	private String getIp(Player player) {
@@ -77,6 +100,8 @@ public class PlayerLoginIPGet extends LowEventHandler<PlayerJoinEvent> {
 	
 	@SuppressWarnings("resource")
 	private void setIp(UUID uuid, String ip) {
+		IRegistry<UUID, Set<String>> playerToIpRegistry = ServiceLocator.getService(PlayerToIPRegistry.class);
+		
 		boolean created = false;
 		
 		Set<String> ips = playerToIpRegistry.getRegister(uuid);
@@ -93,15 +118,12 @@ public class PlayerLoginIPGet extends LowEventHandler<PlayerJoinEvent> {
 		
 		Jedis redis = ServiceLocator.getService(Jedis.class);
 		if (redis != null) {
-			String key = "pipapi-uuid-" + uuid.toString();
+			String key = "pipapi:uuid:" + uuid.toString();
 			if (created) {
-				long length = redis.llen(key).longValue();
-				if (length > 0) {
-					List<String> list = redis.lrange(key, 0L, length);
-					ips.addAll(list);
-				}
+				Set<String> list = redis.smembers(key);
+				ips.addAll(list);
 			}
-			redis.lpush(key, ip);
+			redis.sadd(key, ip);
 		}
 		
 		if (created) {
@@ -130,7 +152,7 @@ public class PlayerLoginIPGet extends LowEventHandler<PlayerJoinEvent> {
 					ips.addAll(retVal.get());
 				}
 			} else {
-				String key = "pipapi-uuid-" + uuid.toString();
+				String key = "pipapi:uuid:" + uuid.toString();
 				SelectIpsCommand command = new SelectIpsCommand(uuid);
 				
 				BiConsumer<Object, IPEventArgs> sqlData = (s, e) -> {
@@ -141,14 +163,23 @@ public class PlayerLoginIPGet extends LowEventHandler<PlayerJoinEvent> {
 					}
 					i.addAll(e.getIps());
 					
-					long length = redis.llen(key).longValue();
-					if (length > 0) {
-						List<String> list = redis.lrange(key, 0L, length);
+					IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
+					JedisPool redisPool = ServiceLocator.getService(JedisPool.class);
+					if (redisPool != null) {
+						Jedis r = redisPool.getResource();
+						if (configRegistry.hasRegister("redis.pass")) {
+							redis.auth(configRegistry.getRegister("redis.pass", String.class));
+						}
+						
+						Set<String> list = redis.smembers(key);
 						for (String sqlIp : i) {
 							if (!list.contains(sqlIp)) {
-								redis.lpush(key, sqlIp);
+								redis.sadd(key, sqlIp);
+								r.publish("pipapi", uuid.toString() + "," + sqlIp);
 							}
 						}
+						
+						r.close();
 					}
 					
 					command.onData().detatchAll();
@@ -168,6 +199,8 @@ public class PlayerLoginIPGet extends LowEventHandler<PlayerJoinEvent> {
 	}
 	@SuppressWarnings("resource")
 	private void setUuid(String ip, UUID uuid) {
+		IRegistry<String, Set<UUID>> ipToPlayerRegistry = ServiceLocator.getService(IPToPlayerRegistry.class);
+		
 		boolean created = false;
 		
 		Set<UUID> uuids = ipToPlayerRegistry.getRegister(ip);
@@ -184,17 +217,14 @@ public class PlayerLoginIPGet extends LowEventHandler<PlayerJoinEvent> {
 		
 		Jedis redis = ServiceLocator.getService(Jedis.class);
 		if (redis != null) {
-			String key = "pipapi-ip-" + ip;
+			String key = "pipapi:ip:" + ip;
 			if (created) {
-				long length = redis.llen(key).longValue();
-				if (length > 0) {
-					List<String> list = redis.lrange(key, 0L, length);
-					for (String u : list) {
-						uuids.add(UUID.fromString(u));
-					}
+				Set<String> list = redis.smembers(key);
+				for (String u : list) {
+					uuids.add(UUID.fromString(u));
 				}
 			}
-			redis.lpush(key, uuid.toString());
+			redis.sadd(key, uuid.toString());
 		}
 		
 		if (created) {
@@ -223,7 +253,7 @@ public class PlayerLoginIPGet extends LowEventHandler<PlayerJoinEvent> {
 					uuids.addAll(retVal.get());
 				}
 			} else {
-				String key = "pipapi-ip-" + ip;
+				String key = "pipapi:ip:" + ip;
 				SelectUuidsCommand command = new SelectUuidsCommand(ip);
 				
 				BiConsumer<Object, UUIDEventArgs> sqlData = (s, e) -> {
@@ -234,14 +264,23 @@ public class PlayerLoginIPGet extends LowEventHandler<PlayerJoinEvent> {
 					}
 					i.addAll(e.getUuids());
 					
-					long length = redis.llen(key).longValue();
-					if (length > 0) {
-						List<String> list = redis.lrange(key, 0L, length);
+					IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
+					JedisPool redisPool = ServiceLocator.getService(JedisPool.class);
+					if (redisPool != null) {
+						Jedis r = redisPool.getResource();
+						if (configRegistry.hasRegister("redis.pass")) {
+							redis.auth(configRegistry.getRegister("redis.pass", String.class));
+						}
+						
+						Set<String> list = redis.smembers(key);
 						for (UUID sqlUuid : i) {
 							if (!list.contains(sqlUuid.toString())) {
-								redis.lpush(key, ip);
+								redis.sadd(key, ip);
+								r.publish("pipapi", uuid.toString() + "," + ip);
 							}
 						}
+						
+						r.close();
 					}
 					
 					command.onData().detatchAll();

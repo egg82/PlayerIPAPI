@@ -1,7 +1,6 @@
 package me.egg82.ipapi;
 
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -14,10 +13,15 @@ import me.egg82.ipapi.registries.IPToPlayerRegistry;
 import me.egg82.ipapi.registries.PlayerToIPRegistry;
 import me.egg82.ipapi.sql.SelectIpsCommand;
 import me.egg82.ipapi.sql.SelectUuidsCommand;
+import ninja.egg82.bukkit.services.ConfigRegistry;
 import ninja.egg82.exceptionHandlers.IExceptionHandler;
 import ninja.egg82.patterns.ServiceLocator;
+import ninja.egg82.patterns.registries.IExpiringRegistry;
 import ninja.egg82.patterns.registries.IRegistry;
+import ninja.egg82.patterns.registries.IVariableRegistry;
+import ninja.egg82.utils.ThreadUtil;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 
 public class IPLookupAPI {
 	//vars
@@ -42,23 +46,24 @@ public class IPLookupAPI {
 		}
 		
 		// Internal cache
-		IRegistry<UUID, Set<String>> playerToIpRegistry = ServiceLocator.getService(PlayerToIPRegistry.class);
+		IExpiringRegistry<UUID, Set<String>> playerToIpRegistry = ServiceLocator.getService(PlayerToIPRegistry.class);
 		Set<String> ips = playerToIpRegistry.getRegister(playerUuid);
 		if (ips != null) {
+			fetchIpsBackground(playerUuid);
 			return ips;
 		}
 		
 		if (!expensive) {
+			fetchIpsBackground(playerUuid);
 			return new HashSet<String>();
 		}
 		
 		// Redis
 		Jedis redis = ServiceLocator.getService(Jedis.class);
 		if (redis != null) {
-			String key = "pipapi-uuid-" + playerUuid.toString();
-			long length = redis.llen(key).longValue();
-			if (length > 0) {
-				List<String> list = redis.lrange(key, 0L, length);
+			String key = "pipapi:uuid:" + playerUuid.toString();
+			Set<String> list = redis.smembers(key);
+			if (list.size() > 0) {
 				ips = new HashSet<String>(list);
 				playerToIpRegistry.setRegister(playerUuid, ips);
 				return ips;
@@ -92,12 +97,32 @@ public class IPLookupAPI {
 		
 		ips = retVal.get();
 		if (redis != null) {
-			String key = "pipapi-uuid-" + playerUuid.toString();
+			String key = "pipapi:uuid:" + playerUuid.toString();
 			for (String ip : ips) {
-				redis.lpush(key, ip);
+				redis.sadd(key, ip);
 			}
 		}
 		playerToIpRegistry.setRegister(playerUuid, ips);
+		
+		Set<String> threadIps = ips;
+		ThreadUtil.submit(new Runnable() {
+			public void run() {
+				IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
+				JedisPool redisPool = ServiceLocator.getService(JedisPool.class);
+				if (redisPool != null) {
+					Jedis redis = redisPool.getResource();
+					if (configRegistry.hasRegister("redis.pass")) {
+						redis.auth(configRegistry.getRegister("redis.pass", String.class));
+					}
+					
+					for (String ip : threadIps) {
+						redis.publish("pipapi", playerUuid.toString() + "," + ip);
+					}
+					
+					redis.close();
+				}
+			}
+		});
 		
 		return ips;
 	}
@@ -111,23 +136,24 @@ public class IPLookupAPI {
 		}
 		
 		// Internal cache
-		IRegistry<String, Set<UUID>> ipToPlayerRegistry = ServiceLocator.getService(IPToPlayerRegistry.class);
+		IExpiringRegistry<String, Set<UUID>> ipToPlayerRegistry = ServiceLocator.getService(IPToPlayerRegistry.class);
 		Set<UUID> uuids = ipToPlayerRegistry.getRegister(ip);
 		if (uuids != null) {
+			fetchUuidsBackground(ip);
 			return uuids;
 		}
 		
 		if (!expensive) {
+			fetchUuidsBackground(ip);
 			return new HashSet<UUID>();
 		}
 		
 		// Redis
 		Jedis redis = ServiceLocator.getService(Jedis.class);
 		if (redis != null) {
-			String key = "pipapi-ip-" + ip;
-			long length = redis.llen(key).longValue();
-			if (length > 0) {
-				List<String> list = redis.lrange(key, 0L, length);
+			String key = "pipapi:ip:" + ip;
+			Set<String> list = redis.smembers(key);
+			if (list.size() > 0) {
 				uuids = new HashSet<UUID>();
 				for (String uuid : list) {
 					uuids.add(UUID.fromString(uuid));
@@ -164,16 +190,165 @@ public class IPLookupAPI {
 		
 		uuids = retVal.get();
 		if (redis != null) {
-			String key = "pipapi-ip-" + ip;
+			String key = "pipapi:ip:" + ip;
 			for (UUID uuid : uuids) {
-				redis.lpush(key, uuid.toString());
+				redis.sadd(key, uuid.toString());
 			}
 		}
 		ipToPlayerRegistry.setRegister(ip, uuids);
+		
+		Set<UUID> threadUuids = uuids;
+		ThreadUtil.submit(new Runnable() {
+			public void run() {
+				IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
+				JedisPool redisPool = ServiceLocator.getService(JedisPool.class);
+				if (redisPool != null) {
+					Jedis redis = redisPool.getResource();
+					if (configRegistry.hasRegister("redis.pass")) {
+						redis.auth(configRegistry.getRegister("redis.pass", String.class));
+					}
+					
+					for (UUID uuid : threadUuids) {
+						redis.publish("pipapi", uuid.toString() + "," + ip);
+					}
+					
+					redis.close();
+				}
+			}
+		});
 		
 		return uuids;
 	}
 	
 	//private
-	
+	@SuppressWarnings("resource")
+	private void fetchIpsBackground(UUID playerUuid) {
+		ThreadUtil.submit(new Runnable() {
+			public void run() {
+				IRegistry<UUID, Set<String>> playerToIpRegistry = ServiceLocator.getService(PlayerToIPRegistry.class);
+				Set<String> ips = playerToIpRegistry.getRegister(playerUuid);
+				if (ips == null) {
+					return;
+				}
+				
+				// Load from Redis in the background
+				Jedis redis = ServiceLocator.getService(Jedis.class);
+				if (redis != null) {
+					String key = "pipapi:uuid:" + playerUuid.toString();
+					Set<String> list = redis.smembers(key);
+					ips.addAll(list);
+				}
+				
+				// Load from SQL in the background
+				if (redis == null) {
+					SelectIpsCommand command = new SelectIpsCommand(playerUuid);
+					
+					BiConsumer<Object, IPEventArgs> sqlData = (s, e) -> {
+						ips.addAll(e.getIps());
+						command.onData().detatchAll();
+					};
+					
+					command.onData().attach(sqlData);
+					command.start();
+				} else {
+					String key = "pipapi:uuid:" + playerUuid.toString();
+					SelectIpsCommand command = new SelectIpsCommand(playerUuid);
+					
+					BiConsumer<Object, IPEventArgs> sqlData = (s, e) -> {
+						ips.addAll(e.getIps());
+						
+						IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
+						JedisPool redisPool = ServiceLocator.getService(JedisPool.class);
+						if (redisPool != null) {
+							Jedis r = redisPool.getResource();
+							if (configRegistry.hasRegister("redis.pass")) {
+								redis.auth(configRegistry.getRegister("redis.pass", String.class));
+							}
+							
+							Set<String> list = redis.smembers(key);
+							for (String sqlIp : ips) {
+								if (!list.contains(sqlIp)) {
+									redis.sadd(key, sqlIp);
+									r.publish("pipapi", playerUuid.toString() + "," + sqlIp);
+								}
+							}
+							
+							r.close();
+						}
+						
+						command.onData().detatchAll();
+					};
+					
+					command.onData().attach(sqlData);
+					command.start();
+				}
+			}
+		});
+	}
+	@SuppressWarnings("resource")
+	private void fetchUuidsBackground(String ip) {
+		ThreadUtil.submit(new Runnable() {
+			public void run() {
+				IRegistry<String, Set<UUID>> ipToPlayerRegistry = ServiceLocator.getService(IPToPlayerRegistry.class);
+				Set<UUID> uuids = ipToPlayerRegistry.getRegister(ip);
+				if (uuids == null) {
+					return;
+				}
+				
+				// Load from Redis in the background
+				Jedis redis = ServiceLocator.getService(Jedis.class);
+				if (redis != null) {
+					String key = "pipapi:ip:" + ip;
+					Set<String> list = redis.smembers(key);
+					for (String u : list) {
+						uuids.add(UUID.fromString(u));
+					}
+				}
+				
+				// Load from SQL in the background
+				if (redis == null) {
+					SelectUuidsCommand command = new SelectUuidsCommand(ip);
+					
+					BiConsumer<Object, UUIDEventArgs> sqlData = (s, e) -> {
+						uuids.addAll(e.getUuids());
+						command.onData().detatchAll();
+					};
+					
+					command.onData().attach(sqlData);
+					command.start();
+				} else {
+					String key = "pipapi:ip:" + ip;
+					SelectUuidsCommand command = new SelectUuidsCommand(ip);
+					
+					BiConsumer<Object, UUIDEventArgs> sqlData = (s, e) -> {
+						uuids.addAll(e.getUuids());
+						
+						IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
+						JedisPool redisPool = ServiceLocator.getService(JedisPool.class);
+						if (redisPool != null) {
+							Jedis r = redisPool.getResource();
+							if (configRegistry.hasRegister("redis.pass")) {
+								redis.auth(configRegistry.getRegister("redis.pass", String.class));
+							}
+							
+							Set<String> list = redis.smembers(key);
+							for (UUID sqlUuid : uuids) {
+								if (!list.contains(sqlUuid.toString())) {
+									redis.sadd(key, ip);
+									r.publish("pipapi", sqlUuid.toString() + "," + ip);
+								}
+							}
+							
+							r.close();
+						}
+						
+						command.onData().detatchAll();
+					};
+					
+					command.onData().attach(sqlData);
+					command.start();
+				}
+			}
+		});
+	}
 }

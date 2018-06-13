@@ -25,5 +25,15 @@ redis:
   # Redis pass, if used
   pass: 
 
+rabbit:
+  # IP address of the RabbitMQ messaging queue server, if used
+  address: 
+  # Port of the RabbitMQ messaging queue server, if used
+  port: 5672
+  # Username for the RabbitMQ messaging queue server, if used
+  user: 'guest'
+  # Password for the RabbitMQ messaging queue server, if used
+  pass: 'guest'
+
 # The amount of time before in-memory IPs expire after non-use
 cacheTime: 12hours

@@ -7,12 +7,18 @@ import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 
 import me.egg82.ipapi.Loaders;
+import me.egg82.ipapi.core.RedisSubscriber;
 import me.egg82.ipapi.registries.IPToPlayerRegistry;
 import me.egg82.ipapi.registries.PlayerToIPRegistry;
+import ninja.egg82.bukkit.services.ConfigRegistry;
 import ninja.egg82.patterns.ServiceLocator;
+import ninja.egg82.patterns.registries.IVariableRegistry;
 import ninja.egg82.plugin.handlers.CommandHandler;
+import ninja.egg82.plugin.messaging.IMessageHandler;
 import ninja.egg82.sql.ISQL;
+import ninja.egg82.utils.ThreadUtil;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 
 public class IPAPIReloadCommand extends CommandHandler {
 	//vars
@@ -25,6 +31,7 @@ public class IPAPIReloadCommand extends CommandHandler {
 	//public
 	
 	//private
+	@SuppressWarnings("resource")
 	protected void onExecute(long elapsedMilliseconds) {
 		if (args.length != 0) {
 			sender.sendMessage(ChatColor.RED + "Incorrect command usage!");
@@ -45,8 +52,42 @@ public class IPAPIReloadCommand extends CommandHandler {
 		if (redis != null) {
 			redis.close();
 		}
+		JedisPool redisPool = ServiceLocator.getService(JedisPool.class);
+		if (redisPool != null) {
+			redisPool.close();
+		}
 		
 		Loaders.loadRedis();
+		
+		ThreadUtil.submit(new Runnable() {
+			public void run() {
+				IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
+				JedisPool redisPool = ServiceLocator.getService(JedisPool.class);
+				if (redisPool != null) {
+					Jedis redis = redisPool.getResource();
+					if (configRegistry.hasRegister("redis.pass")) {
+						redis.auth(configRegistry.getRegister("redis.pass", String.class));
+					}
+					redis.subscribe(new RedisSubscriber(), "pipapi");
+				}
+			}
+		});
+		
+		// Rabbit
+		List<IMessageHandler> services = ServiceLocator.removeServices(IMessageHandler.class);
+		for (IMessageHandler handler : services) {
+			try {
+				handler.close();
+			} catch (Exception ex) {
+				
+			}
+		}
+		
+		Loaders.loadRabbit();
+		
+		if (ServiceLocator.hasService(IMessageHandler.class)) {
+			ServiceLocator.getService(IMessageHandler.class).addHandlersFromPackage("me.egg82.ipapi.messages");
+		}
 		
 		// SQL
 		List<ISQL> sqls = ServiceLocator.removeServices(ISQL.class);

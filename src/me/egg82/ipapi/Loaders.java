@@ -2,16 +2,21 @@ package me.egg82.ipapi;
 
 import java.io.File;
 
+import org.bukkit.Bukkit;
+
 import me.egg82.ipapi.sql.mysql.CreateTablesMySQLCommand;
 import me.egg82.ipapi.sql.sqlite.CreateTablesSQLiteCommand;
 import ninja.egg82.bukkit.BasePlugin;
 import ninja.egg82.bukkit.services.ConfigRegistry;
 import ninja.egg82.patterns.ServiceLocator;
 import ninja.egg82.patterns.registries.IVariableRegistry;
+import ninja.egg82.plugin.enums.SenderType;
+import ninja.egg82.plugin.messaging.RabbitMessageHandler;
 import ninja.egg82.sql.ISQL;
 import ninja.egg82.sql.MySQL;
 import ninja.egg82.sql.SQLite;
 import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 
 public class Loaders {
 	//vars
@@ -60,18 +65,48 @@ public class Loaders {
 	@SuppressWarnings("resource")
 	public static void loadRedis() {
 		IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
-		Jedis jedis = null;
+		Jedis redis = null;
 		
 		if (
 			configRegistry.hasRegister("redis.address")
 			&& configRegistry.hasRegister("redis.port")
 		) {
-			jedis = new Jedis(configRegistry.getRegister("redis.address", String.class), configRegistry.getRegister("redis.port", Number.class).intValue());
-			jedis.connect();
+			redis = new Jedis(configRegistry.getRegister("redis.address", String.class), configRegistry.getRegister("redis.port", Number.class).intValue());
+			redis.connect();
 			if (configRegistry.hasRegister("redis.pass")) {
-				jedis.auth(configRegistry.getRegister("redis.pass", String.class));
+				redis.auth(configRegistry.getRegister("redis.pass", String.class));
 			}
-			ServiceLocator.provideService(jedis);
+			ServiceLocator.provideService(redis);
+			
+			JedisPool redisPool = new JedisPool(configRegistry.getRegister("redis.address", String.class), configRegistry.getRegister("redis.port", Number.class).intValue());
+			ServiceLocator.provideService(redisPool);
+		}
+	}
+	@SuppressWarnings("resource")
+	public static void loadRabbit() {
+		BasePlugin plugin = ServiceLocator.getService(BasePlugin.class);
+		IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
+		RabbitMessageHandler rabbit = null;
+		
+		if (
+			configRegistry.hasRegister("rabbit.address")
+			&& configRegistry.hasRegister("rabbit.port")
+			&& configRegistry.hasRegister("rabbit.user")
+			&& configRegistry.hasRegister("rabbit.pass")
+		) {
+			rabbit = new RabbitMessageHandler(
+				configRegistry.getRegister("rabbit.address", String.class),
+				configRegistry.getRegister("rabbit.port", Number.class).intValue(),
+				configRegistry.getRegister("rabbit.user", String.class),
+				configRegistry.getRegister("rabbit.pass", String.class),
+				plugin.getDescription().getName(),
+				(Bukkit.getServerName() != null && !Bukkit.getServerName().isEmpty()) ? Bukkit.getServerName() : plugin.getServerId(),
+				SenderType.SERVER
+			);
+			
+			rabbit.createChannel("IPAPIPlayerInfo");
+			
+			ServiceLocator.provideService(rabbit);
 		}
 	}
 	
