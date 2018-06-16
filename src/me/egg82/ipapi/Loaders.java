@@ -4,6 +4,7 @@ import java.io.File;
 
 import org.bukkit.Bukkit;
 
+import me.egg82.ipapi.sql.LoadInfoCommand;
 import me.egg82.ipapi.sql.mysql.CreateTablesMySQLCommand;
 import me.egg82.ipapi.sql.sqlite.CreateTablesSQLiteCommand;
 import ninja.egg82.bukkit.BasePlugin;
@@ -15,8 +16,8 @@ import ninja.egg82.plugin.messaging.RabbitMessageHandler;
 import ninja.egg82.sql.ISQL;
 import ninja.egg82.sql.MySQL;
 import ninja.egg82.sql.SQLite;
-import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
+import redis.clients.jedis.JedisPoolConfig;
 
 public class Loaders {
 	//vars
@@ -61,24 +62,21 @@ public class Loaders {
 		} else {
 			throw new RuntimeException("Neither MySQL nor SQLite were defined properly. Aborting plugin load.");
 		}
+		
+		new LoadInfoCommand().start();
 	}
 	@SuppressWarnings("resource")
 	public static void loadRedis() {
 		IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
-		Jedis redis = null;
 		
 		if (
 			configRegistry.hasRegister("redis.address")
 			&& configRegistry.hasRegister("redis.port")
 		) {
-			redis = new Jedis(configRegistry.getRegister("redis.address", String.class), configRegistry.getRegister("redis.port", Number.class).intValue());
-			redis.connect();
-			if (configRegistry.hasRegister("redis.pass")) {
-				redis.auth(configRegistry.getRegister("redis.pass", String.class));
-			}
-			ServiceLocator.provideService(redis);
-			
-			JedisPool redisPool = new JedisPool(configRegistry.getRegister("redis.address", String.class), configRegistry.getRegister("redis.port", Number.class).intValue());
+			JedisPoolConfig redisPoolConfig = new JedisPoolConfig();
+			redisPoolConfig.setMaxTotal(1024);
+			redisPoolConfig.setBlockWhenExhausted(false);
+			JedisPool redisPool = new JedisPool(redisPoolConfig, configRegistry.getRegister("redis.address", String.class), configRegistry.getRegister("redis.port", Number.class).intValue());
 			ServiceLocator.provideService(redisPool);
 		}
 	}

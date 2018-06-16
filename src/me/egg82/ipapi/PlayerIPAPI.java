@@ -1,16 +1,20 @@
 package me.egg82.ipapi;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.function.BiConsumer;
 import java.util.logging.Level;
 
 import org.bukkit.ChatColor;
 
 import me.egg82.ipapi.core.RedisSubscriber;
+import me.egg82.ipapi.sql.LoadInfoCommand;
 import ninja.egg82.bukkit.BasePlugin;
 import ninja.egg82.bukkit.processors.CommandProcessor;
 import ninja.egg82.bukkit.processors.EventProcessor;
 import ninja.egg82.bukkit.services.ConfigRegistry;
 import ninja.egg82.bukkit.utils.YamlUtil;
+import ninja.egg82.events.CompleteEventArgs;
 import ninja.egg82.exceptionHandlers.GameAnalyticsExceptionHandler;
 import ninja.egg82.exceptionHandlers.IExceptionHandler;
 import ninja.egg82.exceptionHandlers.RollbarExceptionHandler;
@@ -23,6 +27,7 @@ import ninja.egg82.plugin.utils.PluginReflectUtil;
 import ninja.egg82.sql.ISQL;
 import ninja.egg82.utils.FileUtil;
 import ninja.egg82.utils.ThreadUtil;
+import ninja.egg82.utils.TimeUtil;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
@@ -108,8 +113,11 @@ public class PlayerIPAPI extends BasePlugin {
 		
 		enableMessage();
 		
+		IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
+		
 		ThreadUtil.rename(getName());
-		ThreadUtil.scheduleAtFixedRate(checkExceptionLimitReached, 0L, 60L * 60L * 1000L);
+		ThreadUtil.schedule(checkExceptionLimitReached, 60L * 60L * 1000L);
+		ThreadUtil.schedule(onInfoLoadThread, TimeUtil.getTime(configRegistry.getRegister("sqlLoadTime", String.class)));
 	}
 	public void onDisable() {
 		super.onDisable();
@@ -121,10 +129,6 @@ public class PlayerIPAPI extends BasePlugin {
 			sql.disconnect();
 		}
 		
-		Jedis redis = ServiceLocator.getService(Jedis.class);
-		if (redis != null) {
-			redis.close();
-		}
 		JedisPool jedisPool = ServiceLocator.getService(JedisPool.class);
 		if (jedisPool != null) {
 			jedisPool.close();
@@ -146,6 +150,30 @@ public class PlayerIPAPI extends BasePlugin {
 	}
 	
 	//private
+	private Runnable onInfoLoadThread = new Runnable() {
+		public void run() {
+			CountDownLatch latch = new CountDownLatch(1);
+			
+			BiConsumer<Object, CompleteEventArgs<?>> complete = (s, e) -> {
+				latch.countDown();
+			};
+			
+			LoadInfoCommand command = new LoadInfoCommand();
+			command.onComplete().attach(complete);
+			command.start();
+			
+			try {
+				latch.await();
+			} catch (Exception ex) {
+				ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
+			}
+			
+			command.onComplete().detatch(complete);
+			
+			IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
+			ThreadUtil.schedule(onInfoLoadThread, TimeUtil.getTime(configRegistry.getRegister("sqlLoadTime", String.class)));
+		}
+	};
 	private Runnable checkExceptionLimitReached = new Runnable() {
 		public void run() {
 			if (exceptionHandler.isLimitReached()) {
@@ -159,6 +187,8 @@ public class PlayerIPAPI extends BasePlugin {
 				exceptionHandler.setUnsentExceptions(oldExceptionHandler.getUnsentExceptions());
 				exceptionHandler.setUnsentLogs(oldExceptionHandler.getUnsentLogs());
 			}
+			
+			ThreadUtil.schedule(checkExceptionLimitReached, 60L * 60L * 1000L);
 		}
 	};
 	

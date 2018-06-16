@@ -1,39 +1,60 @@
+# This is the backing data for everything
+# SQL is used as long-term storage and sometimes updates
+# Try to use an SQL source each server has access to, if possible
+# You may choose to use MySQL or SQLite
+# An SQL database of SOME description is required
 mysql:
   # MySQL address
   address: '127.0.0.1'
   # MySQL port
   port: 3306
-  # MySQL user
+  # MySQL username
   user: 
-  # MySQL pass
+  # MySQL password
   pass: 
   # MySQL database name
   database: 'ipapi'
-  # Number of connection threads to use. Cannot be lower than 1
+  # Number of connections to use. Cannot be lower than 1
+  # Recommended 2+ for parallel queries for non-Redis/Rabbit servers
+  # If using Redis and/or Rabbit, set this to 2+ on hubs and 1 on servers
   threads: 2
 sqlite:
   # SQLite database file name
   file: 'ipapi.db'
-  # Number of connection threads to use. Cannot be lower than 1
+  # Number of connections to use. Cannot be lower than 1
+  # Recommended 2+ for parallel queries for non-Redis/Rabbit servers
+  # If using Redis and/or Rabbit, set this to 2+ on hubs and 1 on servers
   threads: 2
 
+# Redis is used as a cache so lookups can be VERY fast
+# This is used in both the expensive and non-expensive lookups
+# Redis is entirely optional
 redis:
   # Redis address, if used
   address: 
   # Redis port, if used
   port: 6379
-  # Redis pass, if used
+  # Redis password, if used
   pass: 
 
+# Rabbit is used to push instant updates across the network
+# If you don't have/use Redis you can use this to update faster than SQL
+# Even if you use Redis, this can be used as a backup source
+# Rabbit is entirely optional
 rabbit:
-  # IP address of the RabbitMQ messaging queue server, if used
+  # Rabbit address, if used
   address: 
-  # Port of the RabbitMQ messaging queue server, if used
+  # Rabbit port, if used
   port: 5672
-  # Username for the RabbitMQ messaging queue server, if used
+  # Rabbit username, if used
   user: 'guest'
-  # Password for the RabbitMQ messaging queue server, if used
+  # Rabbit password, if used
   pass: 'guest'
 
-# The amount of time before in-memory IPs expire after non-use
+# The amount of time before in-memory caches expire after non-use
+# Try to set this just above average playtime so it isn't re-loaded every login
 cacheTime: 12hours
+# The plugin will re-load data from the database and update internal and Redis caches
+# This is the amount of time between each "pull"
+# This is only used to ensure Redis and internal caches don't get out-of-sync in case of disconnects
+sqlLoadTime: 10seconds

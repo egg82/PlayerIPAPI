@@ -83,7 +83,7 @@ public class SelectUuidsCommand extends Command {
 		sql.onError().detatch(sqlError);
 		sql.onData().detatch(sqlError);
 		
-		onData.invoke(this, new UUIDEventArgs(ip, null));
+		onData.invoke(this, new UUIDEventArgs(ip, new HashSet<UUID>()));
 		
 		throw new RuntimeException(e.getSQLError().ex);
 	}

@@ -83,7 +83,7 @@ public class SelectIpsCommand extends Command {
 		sql.onError().detatch(sqlError);
 		sql.onData().detatch(sqlError);
 		
-		onData.invoke(this, new IPEventArgs(uuid, null));
+		onData.invoke(this, new IPEventArgs(uuid, new HashSet<String>()));
 		
 		throw new RuntimeException(e.getSQLError().ex);
 	}
