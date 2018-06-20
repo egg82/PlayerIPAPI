@@ -7,19 +7,19 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
+import com.google.common.collect.ImmutableSet;
+
 import me.egg82.ipapi.core.IPEventArgs;
 import me.egg82.ipapi.core.UUIDEventArgs;
 import me.egg82.ipapi.registries.IPToPlayerRegistry;
 import me.egg82.ipapi.registries.PlayerToIPRegistry;
 import me.egg82.ipapi.sql.SelectIpsCommand;
 import me.egg82.ipapi.sql.SelectUuidsCommand;
-import ninja.egg82.bukkit.services.ConfigRegistry;
+import me.egg82.ipapi.utils.RedisUtil;
 import ninja.egg82.exceptionHandlers.IExceptionHandler;
 import ninja.egg82.patterns.ServiceLocator;
 import ninja.egg82.patterns.registries.IExpiringRegistry;
-import ninja.egg82.patterns.registries.IVariableRegistry;
 import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
 
 public class IPLookupAPI {
 	//vars
@@ -46,34 +46,25 @@ public class IPLookupAPI {
 		IExpiringRegistry<UUID, Set<String>> playerToIpRegistry = ServiceLocator.getService(PlayerToIPRegistry.class);
 		Set<String> ips = playerToIpRegistry.getRegister(playerUuid);
 		if (ips != null) {
-			return ips;
+			return ImmutableSet.copyOf(ips);
 		}
 		
 		// Redis - use INSTEAD of SQL
-		JedisPool redisPool = ServiceLocator.getService(JedisPool.class);
-		if (redisPool != null) {
-			// Grab new Jedis instance to push updates
-			IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
-			Jedis redis = redisPool.getResource();
-			if (configRegistry.hasRegister("redis.pass")) {
-				redis.auth(configRegistry.getRegister("redis.pass", String.class));
+		try (Jedis redis = RedisUtil.getRedis()) {
+			if (redis != null) {
+				String key = "pipapi:uuid:" + playerUuid.toString();
+				Set<String> list = redis.smembers(key);
+				ips = (list.size() > 0) ? new HashSet<String>(list) : new HashSet<String>();
+				
+				// Cache the result
+				playerToIpRegistry.setRegister(playerUuid, ips);
+				return ImmutableSet.copyOf(ips);
 			}
-			
-			String key = "pipapi:uuid:" + playerUuid.toString();
-			Set<String> list = redis.smembers(key);
-			ips = (list.size() > 0) ? new HashSet<String>(list) : new HashSet<String>();
-			
-			// Cleanup Jedis
-			redis.close();
-			
-			// Cache the result
-			playerToIpRegistry.setRegister(playerUuid, ips);
-			return ips;
 		}
 		
 		if (!expensive) {
 			// Non-expensive call. Return nothing, but don't cache this result
-			return new HashSet<String>();
+			return ImmutableSet.of();
 		}
 		
 		// SQL - use as a last resort
@@ -99,14 +90,14 @@ public class IPLookupAPI {
 		
 		if (retVal.get() == null) {
 			// Something went wrong. Don't cache this
-			return new HashSet<String>();
+			return ImmutableSet.of();
 		}
 		
 		ips = retVal.get();
 		// Cache the result
 		playerToIpRegistry.setRegister(playerUuid, ips);
 		
-		return ips;
+		return ImmutableSet.copyOf(ips);
 	}
 	public Set<UUID> getPlayers(String ip) {
 		return getPlayers(ip, true);
@@ -120,41 +111,32 @@ public class IPLookupAPI {
 		IExpiringRegistry<String, Set<UUID>> ipToPlayerRegistry = ServiceLocator.getService(IPToPlayerRegistry.class);
 		Set<UUID> uuids = ipToPlayerRegistry.getRegister(ip);
 		if (uuids != null) {
-			return uuids;
+			return ImmutableSet.copyOf(uuids);
 		}
 		
 		// Redis - use INSTEAD of SQL
-		JedisPool redisPool = ServiceLocator.getService(JedisPool.class);
-		if (redisPool != null) {
-			// Grab new Jedis instance to push updates
-			IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
-			Jedis redis = redisPool.getResource();
-			if (configRegistry.hasRegister("redis.pass")) {
-				redis.auth(configRegistry.getRegister("redis.pass", String.class));
-			}
-			
-			String key = "pipapi:ip:" + ip;
-			Set<String> list = redis.smembers(key);
-			if (list.size() > 0) {
-				uuids = new HashSet<UUID>();
-				for (String uuid : list) {
-					uuids.add(UUID.fromString(uuid));
+		try (Jedis redis = RedisUtil.getRedis()) {
+			if (redis != null) {
+				String key = "pipapi:ip:" + ip;
+				Set<String> list = redis.smembers(key);
+				if (list.size() > 0) {
+					uuids = new HashSet<UUID>();
+					for (String uuid : list) {
+						uuids.add(UUID.fromString(uuid));
+					}
+				} else {
+					uuids = new HashSet<UUID>();
 				}
-			} else {
-				uuids = new HashSet<UUID>();
+				
+				// Cache the result
+				ipToPlayerRegistry.setRegister(ip, uuids);
+				return ImmutableSet.copyOf(uuids);
 			}
-			
-			// Cleanup Jedis
-			redis.close();
-			
-			// Cache the result
-			ipToPlayerRegistry.setRegister(ip, uuids);
-			return uuids;
 		}
 		
 		if (!expensive) {
 			// Non-expensive call. Return nothing, but don't cache this result
-			return new HashSet<UUID>();
+			return ImmutableSet.of();
 		}
 		
 		// SQL - use as a last resort
@@ -180,14 +162,14 @@ public class IPLookupAPI {
 		
 		if (retVal.get() == null) {
 			// Something went wrong. Don't cache this
-			return new HashSet<UUID>();
+			return ImmutableSet.of();
 		}
 		
 		uuids = retVal.get();
 		// Cache the result
 		ipToPlayerRegistry.setRegister(ip, uuids);
 		
-		return uuids;
+		return ImmutableSet.copyOf(uuids);
 	}
 	
 	//private

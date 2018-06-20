@@ -11,10 +11,10 @@ import me.egg82.ipapi.Loaders;
 import me.egg82.ipapi.core.RedisSubscriber;
 import me.egg82.ipapi.registries.IPToPlayerRegistry;
 import me.egg82.ipapi.registries.PlayerToIPRegistry;
+import me.egg82.ipapi.utils.RedisUtil;
 import ninja.egg82.bukkit.services.ConfigRegistry;
 import ninja.egg82.bukkit.utils.YamlUtil;
 import ninja.egg82.patterns.ServiceLocator;
-import ninja.egg82.patterns.registries.IVariableRegistry;
 import ninja.egg82.plugin.handlers.CommandHandler;
 import ninja.egg82.plugin.messaging.IMessageHandler;
 import ninja.egg82.sql.ISQL;
@@ -34,7 +34,6 @@ public class IPAPIReloadCommand extends CommandHandler {
 	//public
 	
 	//private
-	@SuppressWarnings("resource")
 	protected void onExecute(long elapsedMilliseconds) {
 		if (args.length != 0) {
 			sender.sendMessage(ChatColor.RED + "Incorrect command usage!");
@@ -63,14 +62,10 @@ public class IPAPIReloadCommand extends CommandHandler {
 		
 		ThreadUtil.submit(new Runnable() {
 			public void run() {
-				IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
-				JedisPool redisPool = ServiceLocator.getService(JedisPool.class);
-				if (redisPool != null) {
-					Jedis redis = redisPool.getResource();
-					if (configRegistry.hasRegister("redis.pass")) {
-						redis.auth(configRegistry.getRegister("redis.pass", String.class));
+				try (Jedis redis = RedisUtil.getRedis()) {
+					if (redis != null) {
+						redis.subscribe(new RedisSubscriber(), "pipapi");
 					}
-					redis.subscribe(new RedisSubscriber(), "pipapi");
 				}
 			}
 		});

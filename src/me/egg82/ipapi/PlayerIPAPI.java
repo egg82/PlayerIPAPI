@@ -9,6 +9,7 @@ import org.bukkit.ChatColor;
 
 import me.egg82.ipapi.core.RedisSubscriber;
 import me.egg82.ipapi.sql.LoadInfoCommand;
+import me.egg82.ipapi.utils.RedisUtil;
 import ninja.egg82.bukkit.BasePlugin;
 import ninja.egg82.bukkit.processors.CommandProcessor;
 import ninja.egg82.bukkit.processors.EventProcessor;
@@ -86,7 +87,6 @@ public class PlayerIPAPI extends BasePlugin {
 		Loaders.loadStorage();
 	}
 	
-	@SuppressWarnings("resource")
 	public void onEnable() {
 		super.onEnable();
 		
@@ -99,14 +99,10 @@ public class PlayerIPAPI extends BasePlugin {
 		
 		ThreadUtil.submit(new Runnable() {
 			public void run() {
-				IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
-				JedisPool redisPool = ServiceLocator.getService(JedisPool.class);
-				if (redisPool != null) {
-					Jedis redis = redisPool.getResource();
-					if (configRegistry.hasRegister("redis.pass")) {
-						redis.auth(configRegistry.getRegister("redis.pass", String.class));
+				try (Jedis redis = RedisUtil.getRedis()) {
+					if (redis != null) {
+						redis.subscribe(new RedisSubscriber(), "pipapi");
 					}
-					redis.subscribe(new RedisSubscriber(), "pipapi");
 				}
 			}
 		});

@@ -74,7 +74,7 @@ public class Loaders {
 			&& configRegistry.hasRegister("redis.port")
 		) {
 			JedisPoolConfig redisPoolConfig = new JedisPoolConfig();
-			redisPoolConfig.setMaxTotal(1024);
+			redisPoolConfig.setMaxTotal(128);
 			redisPoolConfig.setBlockWhenExhausted(false);
 			JedisPool redisPool = new JedisPool(redisPoolConfig, configRegistry.getRegister("redis.address", String.class), configRegistry.getRegister("redis.port", Number.class).intValue());
 			ServiceLocator.provideService(redisPool);

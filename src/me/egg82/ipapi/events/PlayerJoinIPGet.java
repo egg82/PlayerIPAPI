@@ -9,14 +9,12 @@ import org.bukkit.event.player.PlayerJoinEvent;
 
 import me.egg82.ipapi.utils.PlayerCacheUtil;
 import me.egg82.ipapi.utils.PlayerChannelUtil;
-import ninja.egg82.bukkit.services.ConfigRegistry;
+import me.egg82.ipapi.utils.RedisUtil;
 import ninja.egg82.patterns.ServiceLocator;
-import ninja.egg82.patterns.registries.IVariableRegistry;
 import ninja.egg82.plugin.handlers.events.LowEventHandler;
 import ninja.egg82.plugin.messaging.IMessageHandler;
 import ninja.egg82.utils.ThreadUtil;
 import redis.clients.jedis.Jedis;
-import redis.clients.jedis.JedisPool;
 
 public class PlayerJoinIPGet extends LowEventHandler<PlayerJoinEvent> {
 	//vars
@@ -29,7 +27,6 @@ public class PlayerJoinIPGet extends LowEventHandler<PlayerJoinEvent> {
 	//public
 	
 	//private
-	@SuppressWarnings("resource")
 	protected void onExecute(long elapsedMilliseconds) {
 		UUID uuid = event.getPlayer().getUniqueId();
 		String ip = getIp(event.getPlayer());
@@ -47,15 +44,10 @@ public class PlayerJoinIPGet extends LowEventHandler<PlayerJoinEvent> {
 		
 		ThreadUtil.submit(new Runnable() {
 			public void run() {
-				IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
-				JedisPool redisPool = ServiceLocator.getService(JedisPool.class);
-				if (redisPool != null) {
-					Jedis redis = redisPool.getResource();
-					if (configRegistry.hasRegister("redis.pass")) {
-						redis.auth(configRegistry.getRegister("redis.pass", String.class));
+				try (Jedis redis = RedisUtil.getRedis()) {
+					if (redis != null) {
+						redis.publish("pipapi", uuid.toString() + "," + ip);
 					}
-					redis.publish("pipapi", uuid.toString() + "," + ip);
-					redis.close();
 				}
 			}
 		});

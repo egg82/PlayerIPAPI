@@ -57,4 +57,4 @@ cacheTime: 12hours
 # The plugin will re-load data from the database and update internal and Redis caches
 # This is the amount of time between each "pull"
 # This is only used to ensure Redis and internal caches don't get out-of-sync in case of disconnects
-sqlLoadTime: 10seconds
+sqlLoadTime: 30seconds
