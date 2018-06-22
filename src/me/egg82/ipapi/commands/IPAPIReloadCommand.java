@@ -46,7 +46,7 @@ public class IPAPIReloadCommand extends CommandHandler {
 		// Config
 		ServiceLocator.getService(ConfigRegistry.class).load(YamlUtil.getOrLoadDefaults(ServiceLocator.getService(Plugin.class).getDataFolder().getAbsolutePath() + FileUtil.DIRECTORY_SEPARATOR_CHAR + "config.yml", "config.yml", true));
 		
-		// Memory cache
+		// Memory caches
 		ServiceLocator.removeServices(IPToPlayerRegistry.class);
 		ServiceLocator.provideService(IPToPlayerRegistry.class);
 		ServiceLocator.removeServices(PlayerToIPRegistry.class);

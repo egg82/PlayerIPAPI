@@ -1,12 +1,15 @@
 package me.egg82.ipapi.utils;
 
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
+
+import org.apache.commons.validator.routines.InetAddressValidator;
 
 import me.egg82.ipapi.core.IPEventArgs;
 import me.egg82.ipapi.core.UUIDEventArgs;
@@ -27,6 +30,7 @@ import redis.clients.jedis.Jedis;
 
 public class PlayerCacheUtil {
 	//vars
+	private static InetAddressValidator ipValidator = InetAddressValidator.getInstance();
 	
 	//constructor
 	public PlayerCacheUtil() {
@@ -35,6 +39,10 @@ public class PlayerCacheUtil {
 	
 	//public
 	public static void addIp(UUID uuid, String ip, boolean force) {
+		if (!ipValidator.isValid(ip)) {
+			return;
+		}
+		
 		IExpiringRegistry<UUID, Set<String>> playerToIpRegistry = ServiceLocator.getService(PlayerToIPRegistry.class);
 		Set<String> ips = null;
 		
@@ -70,6 +78,14 @@ public class PlayerCacheUtil {
 				// Redis available. Add to it and load missing data
 				String key = "pipapi:uuid:" + uuid.toString();
 				Set<String> list = redis.smembers(key);
+				// Validate IP and remove bad data
+				for (Iterator<String> i = list.iterator(); i.hasNext();) {
+					String ip2 = i.next();
+					if (!ipValidator.isValid(ip2)) {
+						redis.srem(key, ip2);
+						i.remove();
+					}
+				}
 				ips.addAll(list);
 				if (!list.contains(ip)) {
 					redis.sadd(key, ip);
@@ -171,6 +187,10 @@ public class PlayerCacheUtil {
 		}
 	}
 	public static void addUuid(String ip, UUID uuid, boolean force) {
+		if (!ipValidator.isValid(ip)) {
+			return;
+		}
+		
 		IExpiringRegistry<String, Set<UUID>> ipToPlayerRegistry = ServiceLocator.getService(IPToPlayerRegistry.class);
 		Set<UUID> uuids = null;
 		
@@ -205,6 +225,14 @@ public class PlayerCacheUtil {
 				// Redis available. Add to it and load missing data
 				String key = "pipapi:ip:" + ip;
 				Set<String> list = redis.smembers(key);
+				// Validate UUID and remove bad data
+				for (Iterator<String> i = list.iterator(); i.hasNext();) {
+					String uuid2 = i.next();
+					if (ipValidator.isValid(uuid2)) {
+						redis.srem(key, uuid2);
+						i.remove();
+					}
+				}
 				for (String u : list) {
 					uuids.add(UUID.fromString(u));
 				}

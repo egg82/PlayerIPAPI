@@ -4,7 +4,7 @@
   <groupId>ninja.egg82.plugins</groupId>
   <artifactId>PlayerIPAPI</artifactId>
   <name>PlayerIPAPI</name>
-  <version>1.1.4</version>
+  <version>1.1.5</version>
   <description>PlayerIPAPI for Bukkit/Spigot</description>
   <url>https://www.egg82.ninja</url>
   <build>
@@ -55,6 +55,14 @@
                 <relocation>
                   <pattern>me.egg82.extern</pattern>
                   <shadedPattern>me.egg82.ipapi.extern</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache</pattern>
+                  <shadedPattern>me.egg82.ipapi.extern.org.apache</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>redis.clients</pattern>
+                  <shadedPattern>me.egg82.ipapi.extern.redis.clients</shadedPattern>
                 </relocation>
               </relocations>
             </configuration>

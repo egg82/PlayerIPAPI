@@ -1,8 +1,12 @@
 package me.egg82.ipapi.sql.sqlite;
 
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
+
+import org.apache.commons.validator.routines.InetAddressValidator;
 
 import ninja.egg82.events.SQLEventArgs;
 import ninja.egg82.exceptionHandlers.IExceptionHandler;
@@ -22,12 +26,22 @@ public class UpdateIPSQLiteCommand extends Command {
 	private BiConsumer<Object, SQLEventArgs> sqlError = (s, e) -> onSQLError(e);
 	private BiConsumer<Object, SQLEventArgs> sqlData = (s, e) -> onSQLData(e);
 	
+	private InetAddressValidator ipValidator = InetAddressValidator.getInstance();
+	
 	//constructor
 	public UpdateIPSQLiteCommand(UUID uuid, Set<String> ips) {
 		super();
 		
+		Set<String> ips2 = new HashSet<String>(ips);
+		for (Iterator<String> i = ips2.iterator(); i.hasNext();) {
+			String ip = i.next();
+			if (!ipValidator.isValid(ip)) {
+				i.remove();
+			}
+		}
+		
 		this.uuid = uuid;
-		this.ips = String.join(",", ips);
+		this.ips = String.join(",", ips2);
 		
 		sql.onError().attach(sqlError);
 		sql.onData().attach(sqlData);

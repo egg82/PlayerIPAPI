@@ -1,11 +1,14 @@
 package me.egg82.ipapi;
 
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
+
+import org.apache.commons.validator.routines.InetAddressValidator;
 
 import com.google.common.collect.ImmutableSet;
 
@@ -23,6 +26,7 @@ import redis.clients.jedis.Jedis;
 
 public class IPLookupAPI {
 	//vars
+	private static InetAddressValidator ipValidator = InetAddressValidator.getInstance();
 	
 	//constructor
 	public IPLookupAPI() {
@@ -42,6 +46,7 @@ public class IPLookupAPI {
 			throw new IllegalArgumentException("playerUuid cannot be null.");
 		}
 		
+		
 		// Internal cache - use first
 		IExpiringRegistry<UUID, Set<String>> playerToIpRegistry = ServiceLocator.getService(PlayerToIPRegistry.class);
 		Set<String> ips = playerToIpRegistry.getRegister(playerUuid);
@@ -54,6 +59,14 @@ public class IPLookupAPI {
 			if (redis != null) {
 				String key = "pipapi:uuid:" + playerUuid.toString();
 				Set<String> list = redis.smembers(key);
+				// Validate IP and remove bad data
+				for (Iterator<String> i = list.iterator(); i.hasNext();) {
+					String ip2 = i.next();
+					if (!ipValidator.isValid(ip2)) {
+						redis.srem(key, ip2);
+						i.remove();
+					}
+				}
 				ips = (list.size() > 0) ? new HashSet<String>(list) : new HashSet<String>();
 				
 				// Cache the result
@@ -119,6 +132,14 @@ public class IPLookupAPI {
 			if (redis != null) {
 				String key = "pipapi:ip:" + ip;
 				Set<String> list = redis.smembers(key);
+				// Validate UUID and remove bad data
+				for (Iterator<String> i = list.iterator(); i.hasNext();) {
+					String uuid2 = i.next();
+					if (ipValidator.isValid(uuid2)) {
+						redis.srem(key, uuid2);
+						i.remove();
+					}
+				}
 				if (list.size() > 0) {
 					uuids = new HashSet<UUID>();
 					for (String uuid : list) {

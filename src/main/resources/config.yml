@@ -52,8 +52,8 @@ rabbit:
   pass: 'guest'
 
 # The amount of time before in-memory caches expire after non-use
-# Try to set this just above average playtime so it isn't re-loaded every login
-cacheTime: 12hours
+# This prevents many sequential lookups from using networking
+cacheTime: 1minute
 # The plugin will re-load data from the database and update internal and Redis caches
 # This is the amount of time between each "pull"
 # This is only used to ensure Redis and internal caches don't get out-of-sync in case of disconnects

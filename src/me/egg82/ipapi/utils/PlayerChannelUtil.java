@@ -27,8 +27,11 @@ public class PlayerChannelUtil {
 		ByteArrayOutputStream stream = new ByteArrayOutputStream();
 		DataOutputStream out = new DataOutputStream(stream);
 		
-		if (!ChannelUtil.writeAll(out, UUIDUtil.toBytes(uuid), ip)) {
-			return;
+		try {
+			out.write(UUIDUtil.toBytes(uuid));
+			out.writeUTF(ip);
+		} catch (Exception ex) {
+			
 		}
 		
 		ChannelUtil.broadcastToServers("IPAPIPlayerInfo", stream.toByteArray());

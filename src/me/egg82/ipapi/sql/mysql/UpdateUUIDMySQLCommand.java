@@ -43,6 +43,12 @@ public class UpdateUUIDMySQLCommand extends Command {
 	
 	//private
 	protected void onExecute(long elapsedMilliseconds) {
+		if (uuids.length() == 0) {
+			sql.onError().detatch(sqlError);
+			sql.onData().detatch(sqlError);
+			return;
+		}
+		
 		query = sql.query("INSERT INTO `ip_to_player` (`ip`, `uuids`) VALUES(?, ?) ON DUPLICATE KEY UPDATE `uuids`=?;", ip, uuids, uuids);
 	}
 	private void onSQLData(SQLEventArgs e) {

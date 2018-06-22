@@ -1,7 +1,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <artifactId>PlayerIPAPI</artifactId>
-  <version>1.1.4</version>
+  <version>1.1.5</version>
   <name>PlayerIPAPI</name>
   <build>
     <sourceDirectory>src</sourceDirectory>
@@ -52,6 +52,14 @@
                 <relocation>
                   <pattern>me.egg82.extern</pattern>
                   <shadedPattern>me.egg82.ipapi.extern</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache</pattern>
+                  <shadedPattern>me.egg82.ipapi.extern.org.apache</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>redis.clients</pattern>
+                  <shadedPattern>me.egg82.ipapi.extern.redis.clients</shadedPattern>
                 </relocation>
               </relocations>
             </configuration>
@@ -126,6 +134,11 @@
     <groupId>redis.clients</groupId>
       <artifactId>jedis</artifactId>
       <version>2.9.0</version>
+    </dependency>
+    <dependency>
+      <groupId>commons-validator</groupId>
+      <artifactId>commons-validator</artifactId>
+      <version>1.6</version>
     </dependency>
   </dependencies>
   <description>PlayerIPAPI for Bukkit/Spigot</description>

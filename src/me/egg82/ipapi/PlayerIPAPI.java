@@ -73,6 +73,12 @@ public class PlayerIPAPI extends BasePlugin {
 		
 		ServiceLocator.getService(ConfigRegistry.class).load(YamlUtil.getOrLoadDefaults(getDataFolder().getAbsolutePath() + FileUtil.DIRECTORY_SEPARATOR_CHAR + "config.yml", "config.yml", true));
 		
+		Loaders.loadStorage();
+	}
+	
+	public void onEnable() {
+		super.onEnable();
+		
 		List<IMessageHandler> services = ServiceLocator.removeServices(IMessageHandler.class);
 		for (IMessageHandler handler : services) {
 			try {
@@ -84,11 +90,6 @@ public class PlayerIPAPI extends BasePlugin {
 		
 		Loaders.loadRedis();
 		Loaders.loadRabbit();
-		Loaders.loadStorage();
-	}
-	
-	public void onEnable() {
-		super.onEnable();
 		
 		numCommands = ServiceLocator.getService(CommandProcessor.class).addHandlersFromPackage("me.egg82.ipapi.commands", PluginReflectUtil.getCommandMapFromPackage("me.egg82.ipapi.commands", false, null, "Command"), false);
 		numEvents = ServiceLocator.getService(EventProcessor.class).addHandlersFromPackage("me.egg82.ipapi.events");

@@ -5,6 +5,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 
+import org.apache.commons.validator.routines.InetAddressValidator;
+
 import me.egg82.ipapi.core.IPEventArgs;
 import ninja.egg82.events.SQLEventArgs;
 import ninja.egg82.exceptionHandlers.IExceptionHandler;
@@ -25,6 +27,8 @@ public class SelectIpsCommand extends Command {
 	private BiConsumer<Object, SQLEventArgs> sqlData = (s, e) -> onSQLData(e);
 	
 	private EventHandler<IPEventArgs> onData = new EventHandler<IPEventArgs>();
+	
+	private InetAddressValidator ipValidator = InetAddressValidator.getInstance();
 	
 	//constructor
 	public SelectIpsCommand(UUID uuid) {
@@ -55,7 +59,12 @@ public class SelectIpsCommand extends Command {
 				try {
 					String[] ips = ((String) o[0]).split(",\\s?");
 					for (String ip : ips) {
-						retVal.add(ip);
+						if (ipValidator.isValid(ip)) {
+							retVal.add(ip);
+						} else {
+							sql.parallelQuery("UPDATE `player_to_ip` SET `ips` = replace(`ips`, ',?', '');", ip);
+							sql.parallelQuery("UPDATE `player_to_ip` SET `ips` = replace(`ips`, '?,', '');", ip);
+						}
 					}
 				} catch (Exception ex) {
 					ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
