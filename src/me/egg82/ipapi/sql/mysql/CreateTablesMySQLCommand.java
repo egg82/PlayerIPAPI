@@ -15,8 +15,8 @@ public class CreateTablesMySQLCommand extends Command {
 	//vars
 	private ISQL sql = ServiceLocator.getService(ISQL.class);
 	
-	private UUID playerToIpQuery = null;
-	private UUID ipToPlayerQuery = null;
+	private UUID mainQuery = null;
+	private UUID queueQuery = null;
 	
 	private UUID finalQuery = null;
 	
@@ -36,23 +36,26 @@ public class CreateTablesMySQLCommand extends Command {
 	//private
 	protected void onExecute(long elapsedMilliseconds) {
 		IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
-		playerToIpQuery = sql.query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=? AND table_name='player_to_ip';", configRegistry.getRegister("mysql.database", String.class));
-		ipToPlayerQuery = sql.query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=? AND table_name='ip_to_player';", configRegistry.getRegister("mysql.database", String.class));
+		mainQuery = sql.query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=? AND table_name='playeripapi';", configRegistry.getRegister("sql.mysql.database", String.class));
+		queueQuery = sql.query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=? AND table_name='playeripapi_queue';", configRegistry.getRegister("sql.mysql.database", String.class));
 	}
 	private void onSQLData(SQLEventArgs e) {
-		if (e.getUuid().equals(playerToIpQuery)) {
+		if (e.getUuid().equals(mainQuery)) {
 			if (e.getData().data.length > 0 && e.getData().data[0].length > 0 && ((Number) e.getData().data[0][0]).intValue() != 0) {
 				return;
 			}
 			
 			sql.query(
-				"CREATE TABLE `player_to_ip` ("
-						+ "`uuid` VARCHAR(255) NOT NULL,"
-						+ "`ips` LONGTEXT NOT NULL"
+				"CREATE TABLE `playeripapi` ("
+						+ "`id` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,"
+						+ "`uuid` VARCHAR(36) NOT NULL,"
+						+ "`ip` VARCHAR(45) NOT NULL,"
+						+ "`created` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+						+ "`updated` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"
 				+ ");"
 			);
-			sql.query("ALTER TABLE `player_to_ip` ADD PRIMARY KEY (`uuid`);");
-		} else if (e.getUuid().equals(ipToPlayerQuery)) {
+			sql.query("ALTER TABLE `playeripapi` ADD UNIQUE (`uuid`, `ip`);");
+		} else if (e.getUuid().equals(queueQuery)) {
 			if (e.getData().data.length > 0 && e.getData().data[0].length > 0 && ((Number) e.getData().data[0][0]).intValue() != 0) {
 				sql.onError().detatch(sqlError);
 				sql.onData().detatch(sqlError);
@@ -60,31 +63,30 @@ public class CreateTablesMySQLCommand extends Command {
 			}
 			
 			sql.query(
-				"CREATE TABLE `ip_to_player` ("
-						+ "`ip` VARCHAR(255) NOT NULL,"
-						+ "`uuids` LONGTEXT NOT NULL"
+				"CREATE TABLE `playeripapi_queue` ("
+						+ "`uuid` VARCHAR(36) NOT NULL,"
+						+ "`ip` VARCHAR(45) NOT NULL,"
+						+ "`created` TIMESTAMP NOT NULL,"
+						+ "`updated` TIMESTAMP NOT NULL"
 				+ ");"
 			);
-			finalQuery = sql.query("ALTER TABLE `ip_to_player` ADD PRIMARY KEY (`ip`);");
+			finalQuery = sql.query("ALTER TABLE `playeripapi_queue` ADD UNIQUE (`uuid`, `ip`);");
 		} else if (e.getUuid().equals(finalQuery)) {
 			sql.onError().detatch(sqlError);
 			sql.onData().detatch(sqlError);
 		}
-		
-		if (!e.getUuid().equals(finalQuery)) {
+	}
+	private void onSQLError(SQLEventArgs e) {
+		if (!e.getUuid().equals(queueQuery) && !e.getUuid().equals(finalQuery)) {
 			return;
 		}
 		
+		ServiceLocator.getService(IExceptionHandler.class).silentException(e.getSQLError().ex);
+		// Wrap in a new exception and print to console. We wrap so we know where the error actually comes from
+		new Exception(e.getSQLError().ex).printStackTrace();
+		
 		sql.onError().detatch(sqlError);
 		sql.onData().detatch(sqlError);
-	}
-	private void onSQLError(SQLEventArgs e) {
-		ServiceLocator.getService(IExceptionHandler.class).silentException(e.getSQLError().ex);
-		
-		if (e.getUuid().equals(ipToPlayerQuery) || e.getUuid().equals(finalQuery)) {
-			sql.onError().detatch(sqlError);
-			sql.onData().detatch(sqlError);
-		}
 		
 		throw new RuntimeException(e.getSQLError().ex);
 	}

@@ -1,19 +1,22 @@
 package me.egg82.ipapi.sql;
 
+import java.sql.Timestamp;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 
-import org.apache.commons.validator.routines.InetAddressValidator;
-
+import me.egg82.ipapi.core.UUIDData;
 import me.egg82.ipapi.core.UUIDEventArgs;
+import me.egg82.ipapi.utils.RedisUtil;
+import me.egg82.ipapi.utils.ValidationUtil;
 import ninja.egg82.events.SQLEventArgs;
 import ninja.egg82.exceptionHandlers.IExceptionHandler;
 import ninja.egg82.patterns.ServiceLocator;
 import ninja.egg82.patterns.events.EventHandler;
 import ninja.egg82.patterns.Command;
 import ninja.egg82.sql.ISQL;
+import redis.clients.jedis.Jedis;
 
 public class SelectUuidsCommand extends Command {
 	//vars
@@ -27,8 +30,6 @@ public class SelectUuidsCommand extends Command {
 	private BiConsumer<Object, SQLEventArgs> sqlData = (s, e) -> onSQLData(e);
 	
 	private EventHandler<UUIDEventArgs> onData = new EventHandler<UUIDEventArgs>();
-	
-	private InetAddressValidator ipValidator = InetAddressValidator.getInstance();
 	
 	//constructor
 	public SelectUuidsCommand(String ip) {
@@ -47,28 +48,43 @@ public class SelectUuidsCommand extends Command {
 	
 	//private
 	protected void onExecute(long elapsedMilliseconds) {
-		query = sql.parallelQuery("SELECT `ips` FROM `ip_to_player` WHERE `ip`=?;", ip);
+		query = sql.parallelQuery("SELECT `uuid`, `created`, `updated` FROM `playeripapi` WHERE `ip`=?;", ip);
 	}
 	
 	private void onSQLData(SQLEventArgs e) {
 		if (e.getUuid().equals(query)) {
 			Exception lastEx = null;
 			
-			Set<UUID> retVal = new HashSet<UUID>();
-			for (Object[] o : e.getData().data) {
-				try {
-					String[] uuids = ((String) o[0]).split(",\\s?");
-					for (String uuid : uuids) {
-						if (!ipValidator.isValid(uuid)) {
-							retVal.add(UUID.fromString(uuid));
-						} else {
-							sql.parallelQuery("UPDATE `ip_to_player` SET `uuids` = replace(`uuids`, ',?', '');", uuid);
-							sql.parallelQuery("UPDATE `ip_to_player` SET `uuids` = replace(`uuids`, '?,', '');", uuid);
+			Set<UUIDData> retVal = new HashSet<UUIDData>();
+			try (Jedis redis = RedisUtil.getRedis()) {
+				// Iterate rows
+				for (Object[] o : e.getData().data) {
+					try {
+						// Validate IP and remove bad data
+						if (!ValidationUtil.isValidUuid((String) o[0])) {
+							if (redis != null) {
+								String uuidKey = "pipapi:uuid:" + (String) o[0];
+								String infoKey = "pipapi:info:" + (String) o[0] + ":" + ip;
+								redis.del(uuidKey);
+								redis.del(infoKey);
+							}
+							sql.parallelQuery("DELETE FROM `playeripapi_queue` WHERE `uuid`=? AND `ip`=?;", o[0], ip);
+							
+							continue;
 						}
+						
+						// Grab all data and convert to more useful object types
+						UUID uuid = UUID.fromString((String) o[0]);
+						long created = ((Timestamp) o[1]).getTime();
+						long updated = ((Timestamp) o[2]).getTime();
+						
+						// Add new data
+						retVal.add(new UUIDData(uuid, created, updated));
+					} catch (Exception ex) {
+						ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
+						ex.printStackTrace();
+						lastEx = ex;
 					}
-				} catch (Exception ex) {
-					ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
-					lastEx = ex;
 				}
 			}
 			
@@ -88,11 +104,13 @@ public class SelectUuidsCommand extends Command {
 		}
 		
 		ServiceLocator.getService(IExceptionHandler.class).silentException(e.getSQLError().ex);
+		// Wrap in a new exception and print to console. We wrap so we know where the error actually comes from
+		new Exception(e.getSQLError().ex).printStackTrace();
 		
 		sql.onError().detatch(sqlError);
 		sql.onData().detatch(sqlError);
 		
-		onData.invoke(this, new UUIDEventArgs(ip, new HashSet<UUID>()));
+		onData.invoke(this, new UUIDEventArgs(ip, new HashSet<UUIDData>()));
 		
 		throw new RuntimeException(e.getSQLError().ex);
 	}

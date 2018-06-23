@@ -4,6 +4,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.util.UUID;
 
+import ninja.egg82.exceptionHandlers.IExceptionHandler;
+import ninja.egg82.patterns.ServiceLocator;
 import ninja.egg82.plugin.utils.ChannelUtil;
 import ninja.egg82.utils.UUIDUtil;
 
@@ -16,7 +18,7 @@ public class PlayerChannelUtil {
 	}
 	
 	//public
-	public static void broadcastInfo(UUID uuid, String ip) {
+	public static void broadcastInfo(UUID uuid, String ip, long created, long updated) {
 		if (uuid == null) {
 			throw new IllegalArgumentException("uuid cannot be null.");
 		}
@@ -28,10 +30,14 @@ public class PlayerChannelUtil {
 		DataOutputStream out = new DataOutputStream(stream);
 		
 		try {
-			out.write(UUIDUtil.toBytes(uuid));
+			UUIDUtil.writeUuid(uuid, out);
 			out.writeUTF(ip);
+			out.writeLong(created);
+			out.writeLong(updated);
 		} catch (Exception ex) {
-			
+			ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
+			ex.printStackTrace();
+			return;
 		}
 		
 		ChannelUtil.broadcastToServers("IPAPIPlayerInfo", stream.toByteArray());

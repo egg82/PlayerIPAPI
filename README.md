@@ -19,21 +19,31 @@ https://www.myget.org/feed/egg82-java/package/maven/ninja.egg82.plugins/PlayerIP
 ### API usage
     IPLookupAPI.getInstance();
     ...
-    Set<String> getIps(UUID playerUuid);
-    Set<UUID> getPlayers(String ip);
+    ImmutableSet<IPData> getIps(UUID playerUuid);
+    ImmutableSet<UUIDData> getPlayers(String ip);
+	...
+	IPData ipData = ips.get(0);
+	ipData.getIp();
+	ipData.getCreated();
+	ipData.getUpdated();
+	...
+	UUIDData uuidData = uuids.get(0);
+	uuidData.getUuid();
+	uuidData.getCreated();
+	uuidData.getUpdated();
 
 ### Example - list all players logged into all IPs that a specified player has ever logged in on
     IPLookupAPI api = IPLookupAPI.getInstance();
-    Set<String> ips = api.getIps(event.getPlayer().getUniqueId());
-    for (String ip : ips) {
-        Set<UUID> players = api.getPlayers(ip);
-        for (UUID uuid : players) {
-            // Do something with player UUID
+    ImmutableSet<IPData> ips = api.getIps(event.getPlayer().getUniqueId());
+    for (IPData ip : ips) {
+        ImmutableSet<UUIDData> players = api.getPlayers(ip.getIp());
+        for (UUIDData uuid : players) {
+            // Do something with uuid.getUuid()
         }
     }
 ### Example - emulate Essentials /seen <IP>
     IPLookupAPI api = IPLookupAPI.getInstance();
-    Set<UUID> uuids = api.getPlayers(args[0]);
-    for (UUID uuid : uuids) {
-        // Do something with player UUID
+    ImmutableSet<UUIDData> uuids = api.getPlayers(args[0]);
+    for (UUIDData uuid : uuids) {
+        // Do something with uuid.getUuid()
     }

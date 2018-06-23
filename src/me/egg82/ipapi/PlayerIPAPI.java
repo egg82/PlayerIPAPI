@@ -8,7 +8,7 @@ import java.util.logging.Level;
 import org.bukkit.ChatColor;
 
 import me.egg82.ipapi.core.RedisSubscriber;
-import me.egg82.ipapi.sql.LoadInfoCommand;
+import me.egg82.ipapi.sql.mysql.FetchQueueMySQLCommand;
 import me.egg82.ipapi.utils.RedisUtil;
 import ninja.egg82.bukkit.BasePlugin;
 import ninja.egg82.bukkit.processors.CommandProcessor;
@@ -22,13 +22,11 @@ import ninja.egg82.exceptionHandlers.RollbarExceptionHandler;
 import ninja.egg82.exceptionHandlers.builders.GameAnalyticsBuilder;
 import ninja.egg82.exceptionHandlers.builders.RollbarBuilder;
 import ninja.egg82.patterns.ServiceLocator;
-import ninja.egg82.patterns.registries.IVariableRegistry;
 import ninja.egg82.plugin.messaging.IMessageHandler;
 import ninja.egg82.plugin.utils.PluginReflectUtil;
 import ninja.egg82.sql.ISQL;
 import ninja.egg82.utils.FileUtil;
 import ninja.egg82.utils.ThreadUtil;
-import ninja.egg82.utils.TimeUtil;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
@@ -110,11 +108,9 @@ public class PlayerIPAPI extends BasePlugin {
 		
 		enableMessage();
 		
-		IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
-		
 		ThreadUtil.rename(getName());
 		ThreadUtil.schedule(checkExceptionLimitReached, 60L * 60L * 1000L);
-		ThreadUtil.schedule(onInfoLoadThread, TimeUtil.getTime(configRegistry.getRegister("sqlLoadTime", String.class)));
+		ThreadUtil.schedule(onFetchQueueThread, 10L * 1000L);
 	}
 	public void onDisable() {
 		super.onDisable();
@@ -147,7 +143,7 @@ public class PlayerIPAPI extends BasePlugin {
 	}
 	
 	//private
-	private Runnable onInfoLoadThread = new Runnable() {
+	private Runnable onFetchQueueThread = new Runnable() {
 		public void run() {
 			CountDownLatch latch = new CountDownLatch(1);
 			
@@ -155,7 +151,7 @@ public class PlayerIPAPI extends BasePlugin {
 				latch.countDown();
 			};
 			
-			LoadInfoCommand command = new LoadInfoCommand();
+			FetchQueueMySQLCommand command = new FetchQueueMySQLCommand();
 			command.onComplete().attach(complete);
 			command.start();
 			
@@ -167,8 +163,7 @@ public class PlayerIPAPI extends BasePlugin {
 			
 			command.onComplete().detatch(complete);
 			
-			IVariableRegistry<String> configRegistry = ServiceLocator.getService(ConfigRegistry.class);
-			ThreadUtil.schedule(onInfoLoadThread, TimeUtil.getTime(configRegistry.getRegister("sqlLoadTime", String.class)));
+			ThreadUtil.schedule(onFetchQueueThread, 10L * 1000L);
 		}
 	};
 	private Runnable checkExceptionLimitReached = new Runnable() {

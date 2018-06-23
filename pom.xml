@@ -1,7 +1,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <artifactId>PlayerIPAPI</artifactId>
-  <version>1.1.5</version>
+  <version>1.2.5</version>
   <name>PlayerIPAPI</name>
   <build>
     <sourceDirectory>src</sourceDirectory>
@@ -40,6 +40,7 @@
                     <exclude>META-INF/*.RSA</exclude>
                     <exclude>**/*.html</exclude>
                     <exclude>**/*.txt</exclude>
+                    <exclude>org/apache/commons/lang</exclude>
                   </excludes>
                 </filter>
               </filters>
@@ -54,8 +55,28 @@
                   <shadedPattern>me.egg82.ipapi.extern</shadedPattern>
                 </relocation>
                 <relocation>
-                  <pattern>org.apache</pattern>
-                  <shadedPattern>me.egg82.ipapi.extern.org.apache</shadedPattern>
+                  <pattern>org.apache.commons.beanutils</pattern>
+                  <shadedPattern>me.egg82.ipapi.extern.org.apache.commons.beanutils</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.commons.collections</pattern>
+                  <shadedPattern>me.egg82.ipapi.extern.org.apache.commons.collections</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.commons.digester</pattern>
+                  <shadedPattern>me.egg82.ipapi.extern.org.apache.commons.digester</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.commons.logging</pattern>
+                  <shadedPattern>me.egg82.ipapi.extern.org.apache.commons.logging</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.commons.pool2</pattern>
+                  <shadedPattern>me.egg82.ipapi.extern.org.apache.commons.pool2</shadedPattern>
+                </relocation>
+                <relocation>
+                  <pattern>org.apache.commons.validator</pattern>
+                  <shadedPattern>me.egg82.ipapi.extern.org.apache.commons.validator</shadedPattern>
                 </relocation>
                 <relocation>
                   <pattern>redis.clients</pattern>
@@ -139,6 +160,24 @@
       <groupId>commons-validator</groupId>
       <artifactId>commons-validator</artifactId>
       <version>1.6</version>
+    </dependency>
+    <dependency>
+      <groupId>com.googlecode.json-simple</groupId>
+      <artifactId>json-simple</artifactId>
+      <version>1.1.1</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-lang3</artifactId>
+      <version>3.7</version>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.google.guava</groupId>
+      <artifactId>guava</artifactId>
+      <version>25.1-jre</version>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
   <description>PlayerIPAPI for Bukkit/Spigot</description>

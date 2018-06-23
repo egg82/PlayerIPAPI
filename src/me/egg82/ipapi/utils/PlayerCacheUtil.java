@@ -1,7 +1,6 @@
 package me.egg82.ipapi.utils;
 
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -9,28 +8,25 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
-import org.apache.commons.validator.routines.InetAddressValidator;
+import org.json.simple.JSONObject;
 
-import me.egg82.ipapi.core.IPEventArgs;
-import me.egg82.ipapi.core.UUIDEventArgs;
+import me.egg82.ipapi.core.IPData;
+import me.egg82.ipapi.core.UUIDData;
+import me.egg82.ipapi.core.UpdateEventArgs;
 import me.egg82.ipapi.registries.IPToPlayerRegistry;
 import me.egg82.ipapi.registries.PlayerToIPRegistry;
-import me.egg82.ipapi.sql.SelectIpsCommand;
-import me.egg82.ipapi.sql.SelectUuidsCommand;
-import me.egg82.ipapi.sql.mysql.UpdateIPMySQLCommand;
-import me.egg82.ipapi.sql.mysql.UpdateUUIDMySQLCommand;
-import me.egg82.ipapi.sql.sqlite.UpdateIPSQLiteCommand;
-import me.egg82.ipapi.sql.sqlite.UpdateUUIDSQLiteCommand;
+import me.egg82.ipapi.sql.mysql.UpdateDataMySQLCommand;
+import me.egg82.ipapi.sql.sqlite.UpdateDataSQLiteCommand;
 import ninja.egg82.enums.BaseSQLType;
 import ninja.egg82.exceptionHandlers.IExceptionHandler;
 import ninja.egg82.patterns.ServiceLocator;
 import ninja.egg82.patterns.registries.IExpiringRegistry;
+import ninja.egg82.plugin.messaging.IMessageHandler;
 import ninja.egg82.sql.ISQL;
 import redis.clients.jedis.Jedis;
 
 public class PlayerCacheUtil {
 	//vars
-	private static InetAddressValidator ipValidator = InetAddressValidator.getInstance();
 	
 	//constructor
 	public PlayerCacheUtil() {
@@ -38,303 +34,127 @@ public class PlayerCacheUtil {
 	}
 	
 	//public
-	public static void addIp(UUID uuid, String ip, boolean force) {
-		if (!ipValidator.isValid(ip)) {
+	public static void addToCache(UUID uuid, String ip, long created, long updated) {
+		if (!ValidationUtil.isValidIp(ip)) {
 			return;
 		}
 		
-		IExpiringRegistry<UUID, Set<String>> playerToIpRegistry = ServiceLocator.getService(PlayerToIPRegistry.class);
-		Set<String> ips = null;
+		IExpiringRegistry<UUID, Set<IPData>> playerToIpRegistry = ServiceLocator.getService(PlayerToIPRegistry.class);
+		Set<IPData> ips = null;
 		
-		// Add to internal cache
-		if (force) {
+		// Add to UUID->IPs cache
+		if (playerToIpRegistry.hasRegister(uuid)) {
+			// Don't want to trigger exceptions from getTimeRemaining
+			
+			long expirationTime = playerToIpRegistry.getTimeRemaining(uuid);
 			ips = playerToIpRegistry.getRegister(uuid);
-			if (ips == null) {
-				ips = new HashSet<String>();
-				playerToIpRegistry.setRegister(uuid, ips);
+			if (ips != null) {
+				// Set expiration back- we don't want to constantly re-set expiration times or we'll have a bad time
+				playerToIpRegistry.setRegisterExpiration(uuid, expirationTime, TimeUnit.MILLISECONDS);
+			} else {
+				ips = new HashSet<IPData>();
 			}
 		} else {
-			if (playerToIpRegistry.hasRegister(uuid)) {
-				// Don't want to trigger exceptions from getTimeRemaining
-				
-				long expirationTime = playerToIpRegistry.getTimeRemaining(uuid);
-				ips = playerToIpRegistry.getRegister(uuid);
-				if (ips != null) {
-					// Set expiration back- we don't want to constantly re-set expiration times or we'll have a bad time
-					playerToIpRegistry.setRegisterExpiration(uuid, expirationTime, TimeUnit.MILLISECONDS);
-					ips.add(ip);
-				} else {
-					ips = new HashSet<String>();
-				}
-			} else {
-				ips = new HashSet<String>();
-			}
+			ips = new HashSet<IPData>();
 		}
 		
-		ips.add(ip);
+		ips.add(new IPData(ip, created, updated));
 		
-		try (Jedis redis = RedisUtil.getRedis()) {
-			if (redis != null) {
-				// Redis available. Add to it and load missing data
-				String key = "pipapi:uuid:" + uuid.toString();
-				Set<String> list = redis.smembers(key);
-				// Validate IP and remove bad data
-				for (Iterator<String> i = list.iterator(); i.hasNext();) {
-					String ip2 = i.next();
-					if (!ipValidator.isValid(ip2)) {
-						redis.srem(key, ip2);
-						i.remove();
-					}
-				}
-				ips.addAll(list);
-				if (!list.contains(ip)) {
-					redis.sadd(key, ip);
-					redis.publish("pipapi", uuid.toString() + "," + ip);
-				}
-				
-				// Load any missing data from SQL in the background, then save
-				SelectIpsCommand command = new SelectIpsCommand(uuid);
-				BiConsumer<Object, IPEventArgs> sqlData = (s, e) -> {
-					Set<String> i = null;
-					if (playerToIpRegistry.hasRegister(uuid)) {
-						// Don't want to trigger exceptions from getTimeRemaining
-						
-						long expirationTime = playerToIpRegistry.getTimeRemaining(uuid);
-						i = playerToIpRegistry.getRegister(uuid);
-						if (i != null) {
-							// Set expiration back- we don't want to constantly re-set expiration times or we'll have a bad time
-							playerToIpRegistry.setRegisterExpiration(uuid, expirationTime, TimeUnit.MILLISECONDS);
-							i.add(ip);
-						} else {
-							i = new HashSet<String>();
-						}
-					} else {
-						i = new HashSet<String>();
-					}
-					
-					// Add data from SQL
-					i.addAll(e.getIps());
-					
-					// Add data from Redis and update Redis from SQL if needed
-					Set<String> l = redis.smembers(key);
-					for (String sqlIp : i) {
-						if (!l.contains(sqlIp)) {
-							redis.sadd(key, sqlIp);
-							redis.publish("pipapi", uuid.toString() + "," + sqlIp);
-						}
-					}
-					i.addAll(l);
-					
-					command.onData().detatchAll();
-					
-					// Save to SQL
-					ISQL sql = ServiceLocator.getService(ISQL.class);
-					if (force || sql.getType() != BaseSQLType.SQLite) {
-						if (sql.getType() == BaseSQLType.MySQL) {
-							new UpdateIPMySQLCommand(uuid, i).start();
-						} else if (sql.getType() == BaseSQLType.SQLite) {
-							new UpdateIPSQLiteCommand(uuid, i).start();
-						}
-					} else {
-						// If we're not forcing, no need to update MySQL
-						// But if it's SQLite we'll want to update anyway
-						new UpdateIPSQLiteCommand(uuid, i).start();
-					}
-				};
-				
-				command.onData().attach(sqlData);
-				command.start();
+		IExpiringRegistry<String, Set<UUIDData>> ipToPlayerRegistry = ServiceLocator.getService(IPToPlayerRegistry.class);
+		Set<UUIDData> uuids = null;
+		
+		// Add to IP->UUIDs cache
+		if (ipToPlayerRegistry.hasRegister(ip)) {
+			// Don't want to trigger exceptions from getTimeRemaining
+			
+			long expirationTime = ipToPlayerRegistry.getTimeRemaining(ip);
+			uuids = ipToPlayerRegistry.getRegister(ip);
+			if (uuids != null) {
+				// Set expiration back- we don't want to constantly re-set expiration times or we'll have a bad time
+				ipToPlayerRegistry.setRegisterExpiration(ip, expirationTime, TimeUnit.MILLISECONDS);
 			} else {
-				// Redis not available. Load missing data from SQL
-				AtomicReference<Set<String>> retVal = new AtomicReference<Set<String>>(null);
-				CountDownLatch latch = new CountDownLatch(1);
-				
-				BiConsumer<Object, IPEventArgs> sqlData = (s, e) -> {
-					retVal.set(e.getIps());
-					latch.countDown();
-				};
-				
-				SelectIpsCommand command = new SelectIpsCommand(uuid);
-				command.onData().attach(sqlData);
-				command.start();
-				
-				try {
-					latch.await();
-				} catch (Exception ex) {
-					ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
-				}
-				
-				command.onData().detatch(sqlData);
-				
-				if (retVal.get() != null) {
-					ips.addAll(retVal.get());
-				}
-				
-				// Save to SQL
-				ISQL sql = ServiceLocator.getService(ISQL.class);
-				if (force || sql.getType() != BaseSQLType.SQLite) {
-					if (sql.getType() == BaseSQLType.MySQL) {
-						new UpdateIPMySQLCommand(uuid, ips).start();
-					} else if (sql.getType() == BaseSQLType.SQLite) {
-						new UpdateIPSQLiteCommand(uuid, ips).start();
-					}
-				} else {
-					// If we're not forcing, no need to update MySQL
-					// But if it's SQLite we'll want to update anyway
-					new UpdateIPSQLiteCommand(uuid, ips).start();
-				}
+				uuids = new HashSet<UUIDData>();
 			}
+		} else {
+			uuids = new HashSet<UUIDData>();
 		}
+		
+		uuids.add(new UUIDData(uuid, created, updated));
 	}
-	public static void addUuid(String ip, UUID uuid, boolean force) {
-		if (!ipValidator.isValid(ip)) {
+	
+	@SuppressWarnings("unchecked")
+	public static void addInfo(UUID uuid, String ip) {
+		if (!ValidationUtil.isValidIp(ip)) {
 			return;
 		}
 		
-		IExpiringRegistry<String, Set<UUID>> ipToPlayerRegistry = ServiceLocator.getService(IPToPlayerRegistry.class);
-		Set<UUID> uuids = null;
+		// Add to SQL and get created/updated data back
+		AtomicReference<UpdateEventArgs> retVal = new AtomicReference<UpdateEventArgs>(null);
+		CountDownLatch latch = new CountDownLatch(1);
 		
-		// Add to internal cache
-		if (force) {
-			uuids = ipToPlayerRegistry.getRegister(ip);
-			if (uuids == null) {
-				uuids = new HashSet<UUID>();
-				ipToPlayerRegistry.setRegister(ip, uuids);
+		BiConsumer<Object, UpdateEventArgs> sqlData = (s, e) -> {
+			retVal.set(e);
+			
+			ISQL sql = ServiceLocator.getService(ISQL.class);
+			if (sql.getType() == BaseSQLType.MySQL) {
+				UpdateDataMySQLCommand c = (UpdateDataMySQLCommand) s;
+				c.onUpdated().detatchAll();
+			} else if (sql.getType() == BaseSQLType.SQLite) {
+				UpdateDataSQLiteCommand c = (UpdateDataSQLiteCommand) s;
+				c.onUpdated().detatchAll();
 			}
-		} else {
-			if (ipToPlayerRegistry.hasRegister(ip)) {
-				// Don't want to trigger exceptions from getTimeRemaining
+			
+			latch.countDown();
+		};
+		
+		ISQL sql = ServiceLocator.getService(ISQL.class);
+		if (sql.getType() == BaseSQLType.MySQL) {
+			UpdateDataMySQLCommand command = new UpdateDataMySQLCommand(uuid, ip);
+			command.onUpdated().attach(sqlData);
+			command.start();
+		} else if (sql.getType() == BaseSQLType.SQLite) {
+			UpdateDataSQLiteCommand command = new UpdateDataSQLiteCommand(uuid, ip);
+			command.onUpdated().attach(sqlData);
+			command.start();
+		}
+		
+		try {
+			latch.await();
+		} catch (Exception ex) {
+			ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
+			ex.printStackTrace();
+		}
+		
+		if (retVal.get() == null || retVal.get().getUuid() == null || retVal.get().getIp() == null) {
+			// Error occurred during SQL functions. We'll skip adding incomplete data because that seems like a bad idea
+			return;
+		}
+		
+		// Add to internal cache, if available
+		addToCache(uuid, ip, retVal.get().getCreated(), retVal.get().getUpdated());
+		
+		// Add to Redis and update other servers, if available
+		try (Jedis redis = RedisUtil.getRedis()) {
+			if (redis != null) {
+				String uuidKey = "pipapi:uuid:" + uuid.toString();
+				redis.sadd(uuidKey, ip);
 				
-				long expirationTime = ipToPlayerRegistry.getTimeRemaining(ip);
-				uuids = ipToPlayerRegistry.getRegister(ip);
-				if (uuids != null) {
-					// Set expiration back- we don't want to constantly re-set expiration times or we'll have a bad time
-					ipToPlayerRegistry.setRegisterExpiration(ip, expirationTime, TimeUnit.MILLISECONDS);
-				} else {
-					uuids = new HashSet<UUID>();
-				}
-			} else {
-				uuids = new HashSet<UUID>();
+				String ipKey = "pipapi:ip:" + ip;
+				redis.sadd(ipKey, uuid.toString());
+				
+				String infoKey = "pipapi:info:" + uuid.toString() + ":" + ip;
+				JSONObject infoObject = new JSONObject();
+				infoObject.put("created", Long.valueOf(retVal.get().getCreated()));
+				infoObject.put("updated", Long.valueOf(retVal.get().getUpdated()));
+				redis.set(infoKey, infoObject.toJSONString());
+				
+				redis.publish("pipapi", uuid.toString() + "," + ip + "," + retVal.get().getCreated() + "," + retVal.get().getUpdated());
 			}
 		}
 		
-		uuids.add(uuid);
-		
-		try (Jedis redis = RedisUtil.getRedis()) {
-			if (redis != null) {
-				// Redis available. Add to it and load missing data
-				String key = "pipapi:ip:" + ip;
-				Set<String> list = redis.smembers(key);
-				// Validate UUID and remove bad data
-				for (Iterator<String> i = list.iterator(); i.hasNext();) {
-					String uuid2 = i.next();
-					if (ipValidator.isValid(uuid2)) {
-						redis.srem(key, uuid2);
-						i.remove();
-					}
-				}
-				for (String u : list) {
-					uuids.add(UUID.fromString(u));
-				}
-				if (!list.contains(uuid.toString())) {
-					redis.sadd(key, uuid.toString());
-					redis.publish("pipapi", uuid.toString() + "," + ip);
-				}
-				
-				// Load any missing data from SQL in the background, then save
-				SelectUuidsCommand command = new SelectUuidsCommand(ip);
-				BiConsumer<Object, UUIDEventArgs> sqlData = (s, e) -> {
-					Set<UUID> i = null;
-					if (ipToPlayerRegistry.hasRegister(ip)) {
-						// Don't want to trigger exceptions from getTimeRemaining
-						
-						long expirationTime = ipToPlayerRegistry.getTimeRemaining(ip);
-						i = ipToPlayerRegistry.getRegister(ip);
-						if (i != null) {
-							// Set expiration back- we don't want to constantly re-set expiration times or we'll have a bad time
-							ipToPlayerRegistry.setRegisterExpiration(ip, expirationTime, TimeUnit.MILLISECONDS);
-							i.add(uuid);
-						} else {
-							i = new HashSet<UUID>();
-						}
-					} else {
-						i = new HashSet<UUID>();
-					}
-					
-					// Add data from SQL
-					i.addAll(e.getUuids());
-					
-					// Add data from Redis and update Redis from SQL if needed
-					Set<String> l = redis.smembers(key);
-					for (UUID sqlUuid : i) {
-						if (!l.contains(sqlUuid.toString())) {
-							redis.sadd(key, sqlUuid.toString());
-							redis.publish("pipapi", sqlUuid.toString() + "," + ip);
-						}
-					}
-					for (String u : l) {
-						i.add(UUID.fromString(u));
-					}
-					
-					command.onData().detatchAll();
-					
-					// Save to SQL
-					ISQL sql = ServiceLocator.getService(ISQL.class);
-					if (force || sql.getType() != BaseSQLType.SQLite) {
-						if (sql.getType() == BaseSQLType.MySQL) {
-							new UpdateUUIDMySQLCommand(ip, i).start();
-						} else if (sql.getType() == BaseSQLType.SQLite) {
-							new UpdateUUIDSQLiteCommand(ip, i).start();
-						}
-					} else {
-						// If we're not forcing, no need to update MySQL
-						// But if it's SQLite we'll want to update anyway
-						new UpdateUUIDSQLiteCommand(ip, i).start();
-					}
-				};
-				
-				command.onData().attach(sqlData);
-				command.start();
-			} else {
-				// Redis not available. Load missing data from SQL
-				AtomicReference<Set<UUID>> retVal = new AtomicReference<Set<UUID>>(null);
-				CountDownLatch latch = new CountDownLatch(1);
-				
-				BiConsumer<Object, UUIDEventArgs> sqlData = (s, e) -> {
-					retVal.set(e.getUuids());
-					latch.countDown();
-				};
-				
-				SelectUuidsCommand command = new SelectUuidsCommand(ip);
-				command.onData().attach(sqlData);
-				command.start();
-				
-				try {
-					latch.await();
-				} catch (Exception ex) {
-					ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
-				}
-				
-				command.onData().detatch(sqlData);
-				
-				if (retVal.get() != null) {
-					uuids.addAll(retVal.get());
-				}
-				
-				// Save to SQL
-				ISQL sql = ServiceLocator.getService(ISQL.class);
-				if (force || sql.getType() != BaseSQLType.SQLite) {
-					if (sql.getType() == BaseSQLType.MySQL) {
-						new UpdateUUIDMySQLCommand(ip, uuids).start();
-					} else if (sql.getType() == BaseSQLType.SQLite) {
-						new UpdateUUIDSQLiteCommand(ip, uuids).start();
-					}
-				} else {
-					// If we're not forcing, no need to update MySQL
-					// But if it's SQLite we'll want to update anyway
-					new UpdateUUIDSQLiteCommand(ip, uuids).start();
-				}
-			}
+		// Update other servers through Rabbit, if available
+		if (ServiceLocator.hasService(IMessageHandler.class)) {
+			PlayerChannelUtil.broadcastInfo(uuid, ip, retVal.get().getCreated(), retVal.get().getUpdated());
 		}
 	}
 	

@@ -8,17 +8,21 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
-import org.apache.commons.validator.routines.InetAddressValidator;
+import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
 
 import com.google.common.collect.ImmutableSet;
 
+import me.egg82.ipapi.core.IPData;
 import me.egg82.ipapi.core.IPEventArgs;
+import me.egg82.ipapi.core.UUIDData;
 import me.egg82.ipapi.core.UUIDEventArgs;
 import me.egg82.ipapi.registries.IPToPlayerRegistry;
 import me.egg82.ipapi.registries.PlayerToIPRegistry;
 import me.egg82.ipapi.sql.SelectIpsCommand;
 import me.egg82.ipapi.sql.SelectUuidsCommand;
 import me.egg82.ipapi.utils.RedisUtil;
+import me.egg82.ipapi.utils.ValidationUtil;
 import ninja.egg82.exceptionHandlers.IExceptionHandler;
 import ninja.egg82.patterns.ServiceLocator;
 import ninja.egg82.patterns.registries.IExpiringRegistry;
@@ -26,7 +30,7 @@ import redis.clients.jedis.Jedis;
 
 public class IPLookupAPI {
 	//vars
-	private static InetAddressValidator ipValidator = InetAddressValidator.getInstance();
+	private static JSONParser parser = new JSONParser();
 	
 	//constructor
 	public IPLookupAPI() {
@@ -38,18 +42,18 @@ public class IPLookupAPI {
 		return PlayerIPAPI.getAPI();
 	}
 	
-	public Set<String> getIps(UUID playerUuid) {
+	public ImmutableSet<IPData> getIps(UUID playerUuid) {
 		return getIps(playerUuid, true);
 	}
-	public Set<String> getIps(UUID playerUuid, boolean expensive) {
+	@SuppressWarnings("unchecked")
+	public ImmutableSet<IPData> getIps(UUID playerUuid, boolean expensive) {
 		if (playerUuid == null) {
 			throw new IllegalArgumentException("playerUuid cannot be null.");
 		}
 		
-		
 		// Internal cache - use first
-		IExpiringRegistry<UUID, Set<String>> playerToIpRegistry = ServiceLocator.getService(PlayerToIPRegistry.class);
-		Set<String> ips = playerToIpRegistry.getRegister(playerUuid);
+		IExpiringRegistry<UUID, Set<IPData>> playerToIpRegistry = ServiceLocator.getService(PlayerToIPRegistry.class);
+		Set<IPData> ips = playerToIpRegistry.getRegister(playerUuid);
 		if (ips != null) {
 			return ImmutableSet.copyOf(ips);
 		}
@@ -57,22 +61,48 @@ public class IPLookupAPI {
 		// Redis - use INSTEAD of SQL
 		try (Jedis redis = RedisUtil.getRedis()) {
 			if (redis != null) {
-				String key = "pipapi:uuid:" + playerUuid.toString();
-				Set<String> list = redis.smembers(key);
-				// Validate IP and remove bad data
+				ips = new HashSet<IPData>();
+				
+				String uuidKey = "pipapi:uuid:" + playerUuid.toString();
+				Set<String> list = redis.smembers(uuidKey);
+				// Iterate IPs and grab info
 				for (Iterator<String> i = list.iterator(); i.hasNext();) {
-					String ip2 = i.next();
-					if (!ipValidator.isValid(ip2)) {
-						redis.srem(key, ip2);
+					String ip = i.next();
+					String infoKey = "pipapi:info:" + playerUuid.toString() + ":" + ip;
+					
+					// Validate IP and remove bad data
+					if (!ValidationUtil.isValidIp(ip)) {
+						redis.srem(uuidKey, ip);
+						redis.del(infoKey);
 						i.remove();
+						continue;
+					}
+					
+					// Grab UUID->IP info
+					String jsonData = redis.get(infoKey);
+					if (jsonData == null) {
+						continue;
+					}
+					
+					try {
+						JSONObject infoObject = (JSONObject) parser.parse(jsonData);
+						long created = ((Number) infoObject.get("created")).longValue();
+						long updated = ((Number) infoObject.get("updated")).longValue();
+						
+						// Add the data
+						ips.add(new IPData(ip, created, updated));
+					} catch (Exception ex) {
+						ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
+						ex.printStackTrace();
 					}
 				}
-				ips = (list.size() > 0) ? new HashSet<String>(list) : new HashSet<String>();
-				
-				// Cache the result
-				playerToIpRegistry.setRegister(playerUuid, ips);
-				return ImmutableSet.copyOf(ips);
 			}
+		}
+		
+		if (ips != null && ips.size() > 0) {
+			// Redis returned some data. Cache the result
+			playerToIpRegistry.setRegister(playerUuid, ips);
+			return ImmutableSet.copyOf(ips);
 		}
 		
 		if (!expensive) {
@@ -81,11 +111,11 @@ public class IPLookupAPI {
 		}
 		
 		// SQL - use as a last resort
-		AtomicReference<Set<String>> retVal = new AtomicReference<Set<String>>(null);
+		AtomicReference<Set<IPData>> retVal = new AtomicReference<Set<IPData>>(null);
 		CountDownLatch latch = new CountDownLatch(1);
 		
 		BiConsumer<Object, IPEventArgs> sqlData = (s, e) -> {
-			retVal.set(e.getIps());
+			retVal.set(e.getIpData());
 			latch.countDown();
 		};
 		
@@ -97,6 +127,7 @@ public class IPLookupAPI {
 			latch.await();
 		} catch (Exception ex) {
 			ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
+			ex.printStackTrace();
 		}
 		
 		command.onData().detatch(sqlData);
@@ -106,23 +137,46 @@ public class IPLookupAPI {
 			return ImmutableSet.of();
 		}
 		
+		// Set Redis, if available
+		try (Jedis redis = RedisUtil.getRedis()) {
+			if (redis != null) {
+				for (IPData data : retVal.get()) {
+					String uuidKey = "pipapi:uuid:" + playerUuid.toString();
+					redis.sadd(uuidKey, data.getIp());
+					
+					String ipKey = "pipapi:ip:" + data.getIp();
+					redis.sadd(ipKey, playerUuid.toString());
+					
+					String infoKey = "pipapi:info:" + playerUuid.toString() + ":" + data.getIp();
+					JSONObject infoObject = new JSONObject();
+					infoObject.put("created", Long.valueOf(data.getCreated()));
+					infoObject.put("updated", Long.valueOf(data.getCreated()));
+					redis.set(infoKey, infoObject.toJSONString());
+				}
+			}
+		}
+		
 		ips = retVal.get();
 		// Cache the result
 		playerToIpRegistry.setRegister(playerUuid, ips);
 		
 		return ImmutableSet.copyOf(ips);
 	}
-	public Set<UUID> getPlayers(String ip) {
+	public ImmutableSet<UUIDData> getPlayers(String ip) {
 		return getPlayers(ip, true);
 	}
-	public Set<UUID> getPlayers(String ip, boolean expensive) {
+	@SuppressWarnings("unchecked")
+	public ImmutableSet<UUIDData> getPlayers(String ip, boolean expensive) {
 		if (ip == null) {
 			throw new IllegalArgumentException("ip cannot be null.");
 		}
+		if (!ValidationUtil.isValidIp(ip)) {
+			return ImmutableSet.of();
+		}
 		
 		// Internal cache - use first
-		IExpiringRegistry<String, Set<UUID>> ipToPlayerRegistry = ServiceLocator.getService(IPToPlayerRegistry.class);
-		Set<UUID> uuids = ipToPlayerRegistry.getRegister(ip);
+		IExpiringRegistry<String, Set<UUIDData>> ipToPlayerRegistry = ServiceLocator.getService(IPToPlayerRegistry.class);
+		Set<UUIDData> uuids = ipToPlayerRegistry.getRegister(ip);
 		if (uuids != null) {
 			return ImmutableSet.copyOf(uuids);
 		}
@@ -130,29 +184,49 @@ public class IPLookupAPI {
 		// Redis - use INSTEAD of SQL
 		try (Jedis redis = RedisUtil.getRedis()) {
 			if (redis != null) {
-				String key = "pipapi:ip:" + ip;
-				Set<String> list = redis.smembers(key);
-				// Validate UUID and remove bad data
-				for (Iterator<String> i = list.iterator(); i.hasNext();) {
-					String uuid2 = i.next();
-					if (ipValidator.isValid(uuid2)) {
-						redis.srem(key, uuid2);
-						i.remove();
-					}
-				}
-				if (list.size() > 0) {
-					uuids = new HashSet<UUID>();
-					for (String uuid : list) {
-						uuids.add(UUID.fromString(uuid));
-					}
-				} else {
-					uuids = new HashSet<UUID>();
-				}
+				uuids = new HashSet<UUIDData>();
 				
-				// Cache the result
-				ipToPlayerRegistry.setRegister(ip, uuids);
-				return ImmutableSet.copyOf(uuids);
+				String ipKey = "pipapi:ip:" + ip;
+				Set<String> list = redis.smembers(ipKey);
+				// Iterate UUIDs and grab info
+				for (Iterator<String> i = list.iterator(); i.hasNext();) {
+					String uuid = i.next();
+					String infoKey = "pipapi:info:" + uuid + ":" + ip;
+					
+					// Validate UUID and remove bad data
+					if (!ValidationUtil.isValidUuid(uuid)) {
+						redis.srem(ipKey, uuid);
+						redis.del(infoKey);
+						i.remove();
+						continue;
+					}
+					
+					// Grab UUID->IP info
+					String jsonData = redis.get(infoKey);
+					if (jsonData == null) {
+						continue;
+					}
+					
+					// Parse info into more useful object types
+					try {
+						JSONObject infoObject = (JSONObject) parser.parse(jsonData);
+						long created = ((Number) infoObject.get("created")).longValue();
+						long updated = ((Number) infoObject.get("updated")).longValue();
+						
+						// Add the data
+						uuids.add(new UUIDData(UUID.fromString(uuid), created, updated));
+					} catch (Exception ex) {
+						ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
+						ex.printStackTrace();
+					}
+				}
 			}
+		}
+		
+		if (uuids != null && uuids.size() > 0) {
+			// Redis returned some data. Cache the result
+			ipToPlayerRegistry.setRegister(ip, uuids);
+			return ImmutableSet.copyOf(uuids);
 		}
 		
 		if (!expensive) {
@@ -161,11 +235,11 @@ public class IPLookupAPI {
 		}
 		
 		// SQL - use as a last resort
-		AtomicReference<Set<UUID>> retVal = new AtomicReference<Set<UUID>>(null);
+		AtomicReference<Set<UUIDData>> retVal = new AtomicReference<Set<UUIDData>>(null);
 		CountDownLatch latch = new CountDownLatch(1);
 		
 		BiConsumer<Object, UUIDEventArgs> sqlData = (s, e) -> {
-			retVal.set(e.getUuids());
+			retVal.set(e.getUuidData());
 			latch.countDown();
 		};
 		
@@ -177,6 +251,7 @@ public class IPLookupAPI {
 			latch.await();
 		} catch (Exception ex) {
 			ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
+			ex.printStackTrace();
 		}
 		
 		command.onData().detatch(sqlData);
@@ -184,6 +259,25 @@ public class IPLookupAPI {
 		if (retVal.get() == null) {
 			// Something went wrong. Don't cache this
 			return ImmutableSet.of();
+		}
+		
+		// Set Redis, if available
+		try (Jedis redis = RedisUtil.getRedis()) {
+			if (redis != null) {
+				for (UUIDData data : retVal.get()) {
+					String uuidKey = "pipapi:uuid:" + data.getUuid().toString();
+					redis.sadd(uuidKey, ip);
+					
+					String ipKey = "pipapi:ip:" + ip;
+					redis.sadd(ipKey, data.getUuid().toString());
+					
+					String infoKey = "pipapi:info:" + data.getUuid().toString() + ":" + ip;
+					JSONObject infoObject = new JSONObject();
+					infoObject.put("created", Long.valueOf(data.getCreated()));
+					infoObject.put("updated", Long.valueOf(data.getCreated()));
+					redis.set(infoKey, infoObject.toJSONString());
+				}
+			}
 		}
 		
 		uuids = retVal.get();

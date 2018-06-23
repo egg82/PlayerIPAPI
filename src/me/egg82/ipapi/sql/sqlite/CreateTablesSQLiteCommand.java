@@ -13,8 +13,7 @@ public class CreateTablesSQLiteCommand extends Command {
 	//vars
 	private ISQL sql = ServiceLocator.getService(ISQL.class);
 	
-	private UUID playerToIpQuery = null;
-	private UUID ipToPlayerQuery = null;
+	private UUID query = null;
 	
 	private UUID finalQuery = null;
 	
@@ -33,23 +32,11 @@ public class CreateTablesSQLiteCommand extends Command {
 	
 	//private
 	protected void onExecute(long elapsedMilliseconds) {
-		playerToIpQuery = sql.query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='player_to_ip';");
-		ipToPlayerQuery = sql.query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='ip_to_player';");
+		query = sql.query("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='playeripapi';");
 	}
 	
 	private void onSQLData(SQLEventArgs e) {
-		if (e.getUuid().equals(playerToIpQuery)) {
-			if (e.getData().data.length > 0 && e.getData().data[0].length > 0 && ((Number) e.getData().data[0][0]).intValue() != 0) {
-				return;
-			}
-			
-			sql.query(
-				"CREATE TABLE `player_to_ip` ("
-						+ "`uuid` TEXT(255) NOT NULL PRIMARY KEY,"
-						+ "`ips` TEXT(4294967295) NOT NULL"
-				+ ");"
-			);
-		} else if (e.getUuid().equals(ipToPlayerQuery)) {
+		if (e.getUuid().equals(query)) {
 			if (e.getData().data.length > 0 && e.getData().data[0].length > 0 && ((Number) e.getData().data[0][0]).intValue() != 0) {
 				sql.onError().detatch(sqlError);
 				sql.onData().detatch(sqlError);
@@ -57,30 +44,31 @@ public class CreateTablesSQLiteCommand extends Command {
 			}
 			
 			finalQuery = sql.query(
-				"CREATE TABLE `ip_to_player` ("
-						+ "`ip` TEXT(255) NOT NULL PRIMARY KEY,"
-						+ "`uuids` TEXT(4294967295) NOT NULL"
+				"CREATE TABLE `playeripapi` ("
+						+ "`id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,"
+						+ "`uuid` TEXT(36) NOT NULL,"
+						+ "`ip` TEXT(45) NOT NULL,"
+						+ "`created` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+						+ "`updated` TIMESTAMP NOT NULL,"
+						+ "UNIQUE(`uuid`, `ip`)"
 				+ ");"
 			);
 		} else if (e.getUuid().equals(finalQuery)) {
 			sql.onError().detatch(sqlError);
 			sql.onData().detatch(sqlError);
 		}
-		
-		if (!e.getUuid().equals(finalQuery)) {
+	}
+	private void onSQLError(SQLEventArgs e) {
+		if (!e.getUuid().equals(query) && !e.getUuid().equals(finalQuery)) {
 			return;
 		}
 		
+		ServiceLocator.getService(IExceptionHandler.class).silentException(e.getSQLError().ex);
+		// Wrap in a new exception and print to console. We wrap so we know where the error actually comes from
+		new Exception(e.getSQLError().ex).printStackTrace();
+		
 		sql.onError().detatch(sqlError);
 		sql.onData().detatch(sqlError);
-	}
-	private void onSQLError(SQLEventArgs e) {
-		ServiceLocator.getService(IExceptionHandler.class).silentException(e.getSQLError().ex);
-		
-		if (e.getUuid().equals(ipToPlayerQuery) || e.getUuid().equals(finalQuery)) {
-			sql.onError().detatch(sqlError);
-			sql.onData().detatch(sqlError);
-		}
 		
 		throw new RuntimeException(e.getSQLError().ex);
 	}

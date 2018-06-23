@@ -23,7 +23,7 @@ public class RedisUtil {
 		JedisPool redisPool = ServiceLocator.getService(JedisPool.class);
 		if (redisPool != null) {
 			redis = redisPool.getResource();
-			if (configRegistry.hasRegister("redis.pass")) {
+			if (configRegistry.hasRegister("redis.pass") && !configRegistry.getRegister("redis.pass", String.class).isEmpty()) {
 				redis.auth(configRegistry.getRegister("redis.pass", String.class));
 			}
 		}

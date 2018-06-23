@@ -38,16 +38,20 @@ public class PlayerInfoMessage extends AsyncMessageHandler {
 		
 		UUID uuid = null;
 		String ip = null;
+		long created = -1L;
+		long updated = -1L;
 		
 		try {
 			uuid = UUIDUtil.readUuid(in);
 			ip = in.readUTF();
+			created = in.readLong();
+			updated = in.readLong();
 		} catch (Exception ex) {
 			ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
+			ex.printStackTrace();
 			throw new RuntimeException(ex);
 		}
 		
-		PlayerCacheUtil.addIp(uuid, ip, false);
-		PlayerCacheUtil.addUuid(ip, uuid, false);
+		PlayerCacheUtil.addToCache(uuid, ip, created, updated);
 	}
 }

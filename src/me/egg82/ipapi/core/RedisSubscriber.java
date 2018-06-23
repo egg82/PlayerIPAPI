@@ -23,15 +23,16 @@ public class RedisSubscriber extends JedisPubSub {
 		}
 		
 		String[] parts = message.split(",\\s?");
-		if (parts.length != 2) {
+		if (parts.length != 4) {
 			return;
 		}
 		
 		UUID uuid = UUID.fromString(parts[0]);
 		String ip = parts[1];
+		long created = Long.parseLong(parts[2]);
+		long updated = Long.parseLong(parts[3]);
 		
-		PlayerCacheUtil.addIp(uuid, ip, false);
-		PlayerCacheUtil.addUuid(ip, uuid, false);
+		PlayerCacheUtil.addToCache(uuid, ip, created, updated);
 	}
 	
 	//private

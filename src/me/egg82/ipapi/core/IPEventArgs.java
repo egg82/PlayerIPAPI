@@ -8,20 +8,20 @@ import ninja.egg82.patterns.events.EventArgs;
 public class IPEventArgs extends EventArgs {
 	//vars
 	private UUID uuid = null;
-	private Set<String> ips = null;
+	private Set<IPData> ipData = null;
 	
 	//constructor
-	public IPEventArgs(UUID uuid, Set<String> ips) {
+	public IPEventArgs(UUID uuid, Set<IPData> ipData) {
 		this.uuid = uuid;
-		this.ips = ips;
+		this.ipData = ipData;
 	}
 	
 	//public
 	public UUID getUuid() {
 		return uuid;
 	}
-	public Set<String> getIps() {
-		return ips;
+	public Set<IPData> getIpData() {
+		return ipData;
 	}
 	
 	//private
