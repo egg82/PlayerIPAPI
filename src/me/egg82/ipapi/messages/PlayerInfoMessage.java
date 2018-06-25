@@ -52,6 +52,6 @@ public class PlayerInfoMessage extends AsyncMessageHandler {
 			throw new RuntimeException(ex);
 		}
 		
-		PlayerCacheUtil.addToCache(uuid, ip, created, updated);
+		PlayerCacheUtil.addToCache(uuid, ip, created, updated, true);
 	}
 }

@@ -22,6 +22,8 @@ public class UpdateDataSQLiteCommand extends Command {
 	
 	private UUID uuid = null;
 	private String ip = null;
+	private long createdTime = -1L;
+	private long updatedTime = -1L;
 	
 	private BiConsumer<Object, SQLEventArgs> sqlError = (s, e) -> onSQLError(e);
 	private BiConsumer<Object, SQLEventArgs> sqlData = (s, e) -> onSQLData(e);
@@ -34,6 +36,17 @@ public class UpdateDataSQLiteCommand extends Command {
 		
 		this.uuid = uuid;
 		this.ip = ip;
+		
+		sql.onError().attach(sqlError);
+		sql.onData().attach(sqlData);
+	}
+	public UpdateDataSQLiteCommand(UUID uuid, String ip, long created, long updated) {
+		super();
+		
+		this.uuid = uuid;
+		this.ip = ip;
+		this.createdTime = created;
+		this.updatedTime = updated;
 		
 		sql.onError().attach(sqlError);
 		sql.onData().attach(sqlData);
@@ -52,12 +65,23 @@ public class UpdateDataSQLiteCommand extends Command {
 			return;
 		}
 		
-		insertQuery = sql.parallelQuery("INSERT OR REPLACE INTO `playeripapi` (`uuid`, `ip`, `updated`) VALUES (?, ?, CURRENT_TIMESTAMP);", uuid.toString(), ip);
+		if (createdTime == -1L && updatedTime == -1L) {
+			insertQuery = sql.parallelQuery("INSERT OR REPLACE INTO `playeripapi` (`uuid`, `ip`, `updated`) VALUES (?, ?, CURRENT_TIMESTAMP);", uuid.toString(), ip);
+		} else {
+			insertQuery = sql.parallelQuery("INSERT OR REPLACE INTO `playeripapi` (`uuid`, `ip`, `created`, `updated`) VALUES (?, ?, ?, ?);", uuid.toString(), ip, Long.valueOf(createdTime), Long.valueOf(updatedTime));
+		}
 	}
 	private void onSQLData(SQLEventArgs e) {
 		if (e.getUuid().equals(insertQuery)) {
 			finalQuery = sql.parallelQuery("SELECT `created`, `updated` FROM `playeripapi` WHERE `uuid`=? AND `ip`=?;", uuid.toString(), ip);
 		} else if (e.getUuid().equals(finalQuery)) {
+			if (createdTime != -1L && updatedTime != -1L) {
+				sql.onError().detatch(sqlError);
+				sql.onData().detatch(sqlError);
+				onUpdated().invoke(this, new UpdateEventArgs(uuid, ip, createdTime, updatedTime));
+				return;
+			}
+			
 			Exception lastEx = null;
 			
 			long created = -1L;

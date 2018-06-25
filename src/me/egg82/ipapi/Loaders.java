@@ -149,6 +149,8 @@ public class Loaders {
 		IMessageHandler messageHandler = ServiceLocator.getService(IMessageHandler.class);
 		if (name != null) {
 			messageHandler.setSenderId(name);
+		} else {
+			messageHandler.setSenderId(plugin.getServerId());
 		}
 		
 		messageHandler.createChannel("IPAPIPlayerInfo");

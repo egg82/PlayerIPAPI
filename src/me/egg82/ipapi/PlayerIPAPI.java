@@ -70,8 +70,6 @@ public class PlayerIPAPI extends BasePlugin {
 		PluginReflectUtil.addServicesFromPackage("me.egg82.ipapi.lists", true);
 		
 		ServiceLocator.getService(ConfigRegistry.class).load(YamlUtil.getOrLoadDefaults(getDataFolder().getAbsolutePath() + FileUtil.DIRECTORY_SEPARATOR_CHAR + "config.yml", "config.yml", true));
-		
-		Loaders.loadStorage();
 	}
 	
 	public void onEnable() {
@@ -88,6 +86,7 @@ public class PlayerIPAPI extends BasePlugin {
 		
 		Loaders.loadRedis();
 		Loaders.loadRabbit();
+		Loaders.loadStorage();
 		
 		numCommands = ServiceLocator.getService(CommandProcessor.class).addHandlersFromPackage("me.egg82.ipapi.commands", PluginReflectUtil.getCommandMapFromPackage("me.egg82.ipapi.commands", false, null, "Command"), false);
 		numEvents = ServiceLocator.getService(EventProcessor.class).addHandlersFromPackage("me.egg82.ipapi.events");

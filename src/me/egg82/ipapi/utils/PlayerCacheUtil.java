@@ -34,7 +34,7 @@ public class PlayerCacheUtil {
 	}
 	
 	//public
-	public static void addToCache(UUID uuid, String ip, long created, long updated) {
+	public static void addToCache(UUID uuid, String ip, long created, long updated, boolean doInsert) {
 		if (!ValidationUtil.isValidIp(ip)) {
 			return;
 		}
@@ -52,13 +52,19 @@ public class PlayerCacheUtil {
 				// Set expiration back- we don't want to constantly re-set expiration times or we'll have a bad time
 				playerToIpRegistry.setRegisterExpiration(uuid, expirationTime, TimeUnit.MILLISECONDS);
 			} else {
+				// Create a dummy set to avoid NPEs
 				ips = new HashSet<IPData>();
 			}
 		} else {
+			// Create a dummy set to avoid NPEs
 			ips = new HashSet<IPData>();
 		}
 		
-		ips.add(new IPData(ip, created, updated));
+		// Finally, add the new value (replace if already present)
+		IPData ipData = new IPData(ip, created, updated);
+		// Here we really just hope we don't run into any race conditions, because seriously
+		ips.remove(ipData);
+		ips.add(ipData);
 		
 		IExpiringRegistry<String, Set<UUIDData>> ipToPlayerRegistry = ServiceLocator.getService(IPToPlayerRegistry.class);
 		Set<UUIDData> uuids = null;
@@ -73,13 +79,27 @@ public class PlayerCacheUtil {
 				// Set expiration back- we don't want to constantly re-set expiration times or we'll have a bad time
 				ipToPlayerRegistry.setRegisterExpiration(ip, expirationTime, TimeUnit.MILLISECONDS);
 			} else {
+				// Create a dummy set to avoid NPEs
 				uuids = new HashSet<UUIDData>();
 			}
 		} else {
+			// Create a dummy set to avoid NPEs
 			uuids = new HashSet<UUIDData>();
 		}
 		
-		uuids.add(new UUIDData(uuid, created, updated));
+		// Finally, add the new value (replace if already present)
+		UUIDData uuidData = new UUIDData(uuid, created, updated);
+		// Here we really just hope we don't run into any race conditions, because seriously
+		uuids.remove(uuidData);
+		uuids.add(uuidData);
+		
+		if (doInsert) {
+			ISQL sql = ServiceLocator.getService(ISQL.class);
+			// Update data in local tables if SQLite is used
+			if (sql.getType() == BaseSQLType.SQLite) {
+				new UpdateDataSQLiteCommand(uuid, ip, created, updated).start();
+			}
+		}
 	}
 	
 	@SuppressWarnings("unchecked")
@@ -131,7 +151,7 @@ public class PlayerCacheUtil {
 		}
 		
 		// Add to internal cache, if available
-		addToCache(uuid, ip, retVal.get().getCreated(), retVal.get().getUpdated());
+		addToCache(uuid, ip, retVal.get().getCreated(), retVal.get().getUpdated(), false);
 		
 		// Add to Redis and update other servers, if available
 		try (Jedis redis = RedisUtil.getRedis()) {

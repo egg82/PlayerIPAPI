@@ -1,17 +1,12 @@
 package me.egg82.ipapi.sql.mysql;
 
 import java.sql.Timestamp;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 
 import org.json.simple.JSONObject;
 
-import me.egg82.ipapi.core.IPData;
-import me.egg82.ipapi.core.UUIDData;
-import me.egg82.ipapi.registries.IPToPlayerRegistry;
-import me.egg82.ipapi.registries.PlayerToIPRegistry;
+import me.egg82.ipapi.utils.PlayerCacheUtil;
 import me.egg82.ipapi.utils.RedisUtil;
 import me.egg82.ipapi.utils.ValidationUtil;
 import ninja.egg82.enums.BaseSQLType;
@@ -19,7 +14,6 @@ import ninja.egg82.events.CompleteEventArgs;
 import ninja.egg82.events.SQLEventArgs;
 import ninja.egg82.exceptionHandlers.IExceptionHandler;
 import ninja.egg82.patterns.ServiceLocator;
-import ninja.egg82.patterns.registries.IExpiringRegistry;
 import ninja.egg82.patterns.Command;
 import ninja.egg82.sql.ISQL;
 import redis.clients.jedis.Jedis;
@@ -60,9 +54,6 @@ public class FetchQueueMySQLCommand extends Command {
 	private void onSQLData(SQLEventArgs e) {
 		if (e.getUuid().equals(fetchQuery)) {
 			Exception lastEx = null;
-			
-			IExpiringRegistry<UUID, Set<IPData>> playerToIpRegistry = ServiceLocator.getService(PlayerToIPRegistry.class);
-			IExpiringRegistry<String, Set<UUIDData>> ipToPlayerRegistry = ServiceLocator.getService(IPToPlayerRegistry.class);
 			
 			try (Jedis redis = RedisUtil.getRedis()) {
 				// Iterate rows
@@ -113,37 +104,8 @@ public class FetchQueueMySQLCommand extends Command {
 							redis.set(infoKey, infoObject.toJSONString());
 						}
 						
-						// Set registers
-						if (playerToIpRegistry.hasRegister(uuid)) {
-							// Try to keep exceptions to a minimum as it slows down the thread
-							long expirationTime = playerToIpRegistry.getTimeRemaining(uuid);
-							Set<IPData> register = playerToIpRegistry.getRegister(uuid);
-							if (register != null) {
-								// Set expiration back- we don't want to constantly re-set expiration times or we'll have a bad time
-								playerToIpRegistry.setRegisterExpiration(uuid, expirationTime, TimeUnit.MILLISECONDS);
-								
-								// Finally, add the new value (replace if already present)
-								IPData data = new IPData(ip, created, updated);
-								// Here we really just hope we don't run into any race conditions, because seriously
-								register.remove(data);
-								register.add(data);
-							}
-						}
-						if (ipToPlayerRegistry.hasRegister(ip)) {
-							// Try to keep exceptions to a minimum as it slows down the thread
-							long expirationTime = ipToPlayerRegistry.getTimeRemaining(ip);
-							Set<UUIDData> register = ipToPlayerRegistry.getRegister(ip);
-							if (register != null) {
-								// Set expiration back- we don't want to constantly re-set expiration times or we'll have a bad time
-								ipToPlayerRegistry.setRegisterExpiration(ip, expirationTime, TimeUnit.MILLISECONDS);
-								
-								// Finally, add the new value (replace if already present)
-								UUIDData data = new UUIDData(uuid, created, updated);
-								// Here we really just hope we don't run into any race conditions, because seriously
-								register.remove(data);
-								register.add(data);
-							}
-						}
+						// Set cache, if available
+						PlayerCacheUtil.addToCache(uuid, ip, created, updated, true);
 					} catch (Exception ex) {
 						ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
 						ex.printStackTrace();
@@ -152,7 +114,7 @@ public class FetchQueueMySQLCommand extends Command {
 				}
 			}
 			
-			finalQuery = sql.parallelQuery("DELETE FROM `playeripapi_queue` WHERE `created` <= CURRENT_TIMESTAMP() - INTERVAL 2 MINUTE;");
+			finalQuery = sql.parallelQuery("DELETE FROM `playeripapi_queue` WHERE `updated` <= CURRENT_TIMESTAMP() - INTERVAL 2 MINUTE;");
 			
 			if (lastEx != null) {
 				throw new RuntimeException(lastEx);

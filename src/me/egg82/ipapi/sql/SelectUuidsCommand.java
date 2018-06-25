@@ -68,7 +68,7 @@ public class SelectUuidsCommand extends Command {
 								redis.del(uuidKey);
 								redis.del(infoKey);
 							}
-							sql.parallelQuery("DELETE FROM `playeripapi_queue` WHERE `uuid`=? AND `ip`=?;", o[0], ip);
+							sql.parallelQuery("DELETE FROM `playeripapi` WHERE `uuid`=? AND `ip`=?;", o[0], ip);
 							
 							continue;
 						}

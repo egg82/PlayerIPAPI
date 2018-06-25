@@ -79,6 +79,8 @@ public class UpdateDataMySQLCommand extends Command {
 				finalQuery = sql.parallelQuery("INSERT INTO `playeripapi_queue` (`uuid`, `ip`, `created`, `updated`) VALUES(?, ?, ?, ?) ON DUPLICATE KEY UPDATE `updated`=?;", uuid.toString(), ip, created, updated, updated);
 				onUpdated().invoke(this, new UpdateEventArgs(uuid, ip, created.getTime(), updated.getTime()));
 			} else {
+				sql.onError().detatch(sqlError);
+				sql.onData().detatch(sqlError);
 				onUpdated().invoke(this, UpdateEventArgs.EMPTY);
 			}
 			
@@ -99,8 +101,10 @@ public class UpdateDataMySQLCommand extends Command {
 		// Wrap in a new exception and print to console. We wrap so we know where the error actually comes from
 		new Exception(e.getSQLError().ex).printStackTrace();
 		
-		sql.onError().detatch(sqlError);
-		sql.onData().detatch(sqlError);
+		if (e.getUuid().equals(selectQuery) || e.getUuid().equals(finalQuery)) {
+			sql.onError().detatch(sqlError);
+			sql.onData().detatch(sqlError);
+		}
 		
 		if (e.getUuid().equals(insertQuery) || e.getUuid().equals(selectQuery)) {
 			onUpdated().invoke(this, UpdateEventArgs.EMPTY);

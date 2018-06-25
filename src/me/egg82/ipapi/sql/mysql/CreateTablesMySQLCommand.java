@@ -77,7 +77,7 @@ public class CreateTablesMySQLCommand extends Command {
 		}
 	}
 	private void onSQLError(SQLEventArgs e) {
-		if (!e.getUuid().equals(queueQuery) && !e.getUuid().equals(finalQuery)) {
+		if (!e.getUuid().equals(mainQuery) && !e.getUuid().equals(queueQuery) && !e.getUuid().equals(finalQuery)) {
 			return;
 		}
 		
@@ -85,8 +85,10 @@ public class CreateTablesMySQLCommand extends Command {
 		// Wrap in a new exception and print to console. We wrap so we know where the error actually comes from
 		new Exception(e.getSQLError().ex).printStackTrace();
 		
-		sql.onError().detatch(sqlError);
-		sql.onData().detatch(sqlError);
+		if (e.getUuid().equals(queueQuery) || e.getUuid().equals(finalQuery)) {
+			sql.onError().detatch(sqlError);
+			sql.onData().detatch(sqlError);
+		}
 		
 		throw new RuntimeException(e.getSQLError().ex);
 	}

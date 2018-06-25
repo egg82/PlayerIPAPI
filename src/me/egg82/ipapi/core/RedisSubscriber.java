@@ -32,7 +32,7 @@ public class RedisSubscriber extends JedisPubSub {
 		long created = Long.parseLong(parts[2]);
 		long updated = Long.parseLong(parts[3]);
 		
-		PlayerCacheUtil.addToCache(uuid, ip, created, updated);
+		PlayerCacheUtil.addToCache(uuid, ip, created, updated, true);
 	}
 	
 	//private

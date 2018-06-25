@@ -25,11 +25,8 @@ sql:
 # Redis is entirely optional
 redis:
   enabled: false
-  # Redis address, if used
   address: ''
-  # Redis port, if used
   port: 6379
-  # Redis password, if used
   pass: ''
 
 # Rabbit is used to push instant updates across the network
@@ -38,13 +35,9 @@ redis:
 # Rabbit is entirely optional
 rabbit:
   enabled: false
-  # Rabbit address, if used
   address: ''
-  # Rabbit port, if used
   port: 5672
-  # Rabbit username, if used
   user: 'guest'
-  # Rabbit password, if used
   pass: 'guest'
 
 # The amount of time before in-memory caches expire after non-use
