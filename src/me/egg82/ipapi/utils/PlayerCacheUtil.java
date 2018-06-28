@@ -96,7 +96,7 @@ public class PlayerCacheUtil {
 		if (doInsert) {
 			ISQL sql = ServiceLocator.getService(ISQL.class);
 			// Update data in local tables if SQLite is used
-			if (sql.getType() == BaseSQLType.SQLite) {
+			if (sql != null && sql.getType() == BaseSQLType.SQLite) {
 				new UpdateDataSQLiteCommand(uuid, ip, created, updated).start();
 			}
 		}
