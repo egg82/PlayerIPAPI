@@ -66,9 +66,9 @@ public class UpdateDataSQLiteCommand extends Command {
 		}
 		
 		if (createdTime == -1L && updatedTime == -1L) {
-			insertQuery = sql.parallelQuery("INSERT OR REPLACE INTO `playeripapi` (`uuid`, `ip`, `updated`) VALUES (?, ?, CURRENT_TIMESTAMP);", uuid.toString(), ip);
+			insertQuery = sql.query("INSERT OR REPLACE INTO `playeripapi` (`uuid`, `ip`, `updated`) VALUES (?, ?, CURRENT_TIMESTAMP);", uuid.toString(), ip);
 		} else {
-			insertQuery = sql.parallelQuery("INSERT OR REPLACE INTO `playeripapi` (`uuid`, `ip`, `created`, `updated`) VALUES (?, ?, ?, ?);", uuid.toString(), ip, Long.valueOf(createdTime), Long.valueOf(updatedTime));
+			insertQuery = sql.query("INSERT OR REPLACE INTO `playeripapi` (`uuid`, `ip`, `created`, `updated`) VALUES (?, ?, ?, ?);", uuid.toString(), ip, new Timestamp(createdTime), new Timestamp(updatedTime));
 		}
 	}
 	private void onSQLData(SQLEventArgs e) {
@@ -89,8 +89,8 @@ public class UpdateDataSQLiteCommand extends Command {
 			
 			for (Object[] o : e.getData().data) {
 				try {
-					created = ((Timestamp) o[0]).getTime();
-					updated = ((Timestamp) o[1]).getTime();
+					created = Timestamp.valueOf((String) o[0]).getTime();
+					updated = Timestamp.valueOf((String) o[1]).getTime();
 				} catch (Exception ex) {
 					ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
 					ex.printStackTrace();

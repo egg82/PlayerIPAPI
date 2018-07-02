@@ -53,7 +53,7 @@ public class UpdateDataMySQLCommand extends Command {
 			return;
 		}
 		
-		insertQuery = sql.parallelQuery("INSERT INTO `playeripapi` (`uuid`, `ip`) VALUES(?, ?) ON DUPLICATE KEY UPDATE `updated`=CURRENT_TIMESTAMP();", uuid.toString(), ip);
+		insertQuery = sql.query("INSERT INTO `playeripapi` (`uuid`, `ip`) VALUES(?, ?) ON DUPLICATE KEY UPDATE `updated`=CURRENT_TIMESTAMP();", uuid.toString(), ip);
 	}
 	private void onSQLData(SQLEventArgs e) {
 		if (e.getUuid().equals(insertQuery)) {

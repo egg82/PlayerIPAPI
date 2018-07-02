@@ -9,6 +9,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
 import org.json.simple.JSONObject;
+import org.json.simple.parser.JSONParser;
 
 import me.egg82.ipapi.core.IPData;
 import me.egg82.ipapi.core.UUIDData;
@@ -23,10 +24,12 @@ import ninja.egg82.patterns.ServiceLocator;
 import ninja.egg82.patterns.registries.IExpiringRegistry;
 import ninja.egg82.plugin.messaging.IMessageHandler;
 import ninja.egg82.sql.ISQL;
+import ninja.egg82.utils.ThreadUtil;
 import redis.clients.jedis.Jedis;
 
 public class PlayerCacheUtil {
 	//vars
+	private static JSONParser parser = new JSONParser();
 	
 	//constructor
 	public PlayerCacheUtil() {
@@ -108,52 +111,7 @@ public class PlayerCacheUtil {
 			return;
 		}
 		
-		// Add to SQL and get created/updated data back
-		AtomicReference<UpdateEventArgs> retVal = new AtomicReference<UpdateEventArgs>(null);
-		CountDownLatch latch = new CountDownLatch(1);
-		
-		BiConsumer<Object, UpdateEventArgs> sqlData = (s, e) -> {
-			retVal.set(e);
-			
-			ISQL sql = ServiceLocator.getService(ISQL.class);
-			if (sql.getType() == BaseSQLType.MySQL) {
-				UpdateDataMySQLCommand c = (UpdateDataMySQLCommand) s;
-				c.onUpdated().detatchAll();
-			} else if (sql.getType() == BaseSQLType.SQLite) {
-				UpdateDataSQLiteCommand c = (UpdateDataSQLiteCommand) s;
-				c.onUpdated().detatchAll();
-			}
-			
-			latch.countDown();
-		};
-		
-		ISQL sql = ServiceLocator.getService(ISQL.class);
-		if (sql.getType() == BaseSQLType.MySQL) {
-			UpdateDataMySQLCommand command = new UpdateDataMySQLCommand(uuid, ip);
-			command.onUpdated().attach(sqlData);
-			command.start();
-		} else if (sql.getType() == BaseSQLType.SQLite) {
-			UpdateDataSQLiteCommand command = new UpdateDataSQLiteCommand(uuid, ip);
-			command.onUpdated().attach(sqlData);
-			command.start();
-		}
-		
-		try {
-			latch.await();
-		} catch (Exception ex) {
-			ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
-			ex.printStackTrace();
-		}
-		
-		if (retVal.get() == null || retVal.get().getUuid() == null || retVal.get().getIp() == null) {
-			// Error occurred during SQL functions. We'll skip adding incomplete data because that seems like a bad idea
-			return;
-		}
-		
-		// Add to internal cache, if available
-		addToCache(uuid, ip, retVal.get().getCreated(), retVal.get().getUpdated(), false);
-		
-		// Add to Redis and update other servers, if available
+		// Preemptively add to Redis to hopefully avoid race conditions. We'll update it again later
 		try (Jedis redis = RedisUtil.getRedis()) {
 			if (redis != null) {
 				String uuidKey = "pipapi:uuid:" + uuid.toString();
@@ -162,20 +120,99 @@ public class PlayerCacheUtil {
 				String ipKey = "pipapi:ip:" + ip;
 				redis.sadd(ipKey, uuid.toString());
 				
-				String infoKey = "pipapi:info:" + uuid.toString() + ":" + ip;
-				JSONObject infoObject = new JSONObject();
-				infoObject.put("created", Long.valueOf(retVal.get().getCreated()));
-				infoObject.put("updated", Long.valueOf(retVal.get().getUpdated()));
-				redis.set(infoKey, infoObject.toJSONString());
+				Long time = Long.valueOf(System.currentTimeMillis());
 				
-				redis.publish("pipapi", uuid.toString() + "," + ip + "," + retVal.get().getCreated() + "," + retVal.get().getUpdated());
+				// Sadly we only update the "updated" param if the value exists so "SETNX" is useless here. We get to round-trip twice, but it's still faster than SQL
+				String infoKey = "pipapi:info:" + uuid.toString() + ":" + ip;
+				String info = redis.get(infoKey);
+				
+				if (info == null) {
+					JSONObject infoObject = new JSONObject();
+					infoObject.put("created", time);
+					infoObject.put("updated", time);
+					redis.set(infoKey, infoObject.toJSONString());
+				} else {
+					try {
+						JSONObject infoObject = (JSONObject) parser.parse(info);
+						infoObject.put("updated", time);
+						redis.set(infoKey, infoObject.toJSONString());
+					} catch (Exception ex) {
+						ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
+						ex.printStackTrace();
+					}
+				}
 			}
 		}
 		
-		// Update other servers through Rabbit, if available
-		if (ServiceLocator.hasService(IMessageHandler.class)) {
-			PlayerChannelUtil.broadcastInfo(uuid, ip, retVal.get().getCreated(), retVal.get().getUpdated());
-		}
+		// Do work in new thread. This is ONLY safe from race conditions due to the fact that UpdateData SQL commands run a non-parallel insert query
+		// Meaning even if a race condition were to occur, a SQL lookup would be used and the lookup would be blocked until the insert operation completed
+		// This might, in rare cases, cause some extra lag with plugins that get data via the main thread, but would guarantee player logins don't cause the server to lag
+		ThreadUtil.submit(new Runnable() {
+			public void run() {
+				// Add to SQL and get created/updated data back
+				AtomicReference<UpdateEventArgs> retVal = new AtomicReference<UpdateEventArgs>(null);
+				CountDownLatch latch = new CountDownLatch(1);
+				
+				BiConsumer<Object, UpdateEventArgs> sqlData = (s, e) -> {
+					retVal.set(e);
+					
+					ISQL sql = ServiceLocator.getService(ISQL.class);
+					if (sql.getType() == BaseSQLType.MySQL) {
+						UpdateDataMySQLCommand c = (UpdateDataMySQLCommand) s;
+						c.onUpdated().detatchAll();
+					} else if (sql.getType() == BaseSQLType.SQLite) {
+						UpdateDataSQLiteCommand c = (UpdateDataSQLiteCommand) s;
+						c.onUpdated().detatchAll();
+					}
+					
+					latch.countDown();
+				};
+				
+				ISQL sql = ServiceLocator.getService(ISQL.class);
+				if (sql.getType() == BaseSQLType.MySQL) {
+					UpdateDataMySQLCommand command = new UpdateDataMySQLCommand(uuid, ip);
+					command.onUpdated().attach(sqlData);
+					command.start();
+				} else if (sql.getType() == BaseSQLType.SQLite) {
+					UpdateDataSQLiteCommand command = new UpdateDataSQLiteCommand(uuid, ip);
+					command.onUpdated().attach(sqlData);
+					command.start();
+				}
+				
+				try {
+					latch.await();
+				} catch (Exception ex) {
+					ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
+					ex.printStackTrace();
+				}
+				
+				if (retVal.get() == null || retVal.get().getUuid() == null || retVal.get().getIp() == null) {
+					// Error occurred during SQL functions. We'll skip adding incomplete data because that seems like a bad idea
+					return;
+				}
+				
+				// Add to internal cache, if available
+				addToCache(uuid, ip, retVal.get().getCreated(), retVal.get().getUpdated(), false);
+				
+				// Add to Redis and update other servers, if available
+				try (Jedis redis = RedisUtil.getRedis()) {
+					if (redis != null) {
+						String infoKey = "pipapi:info:" + uuid.toString() + ":" + ip;
+						JSONObject infoObject = new JSONObject();
+						infoObject.put("created", Long.valueOf(retVal.get().getCreated()));
+						infoObject.put("updated", Long.valueOf(retVal.get().getUpdated()));
+						redis.set(infoKey, infoObject.toJSONString());
+						
+						redis.publish("pipapi", uuid.toString() + "," + ip + "," + retVal.get().getCreated() + "," + retVal.get().getUpdated());
+					}
+				}
+				
+				// Update other servers through Rabbit, if available
+				if (ServiceLocator.hasService(IMessageHandler.class)) {
+					PlayerChannelUtil.broadcastInfo(uuid, ip, retVal.get().getCreated(), retVal.get().getUpdated());
+				}
+			}
+		});
 	}
 	
 	//private

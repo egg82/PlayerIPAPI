@@ -1,8 +1,8 @@
 name: PlayerIPAPI
 main: me.egg82.ipapi.PlayerIPAPI
-version: 1.2.7
+version: 1.2.8
 author: egg82
-description: API that logs player/IP combos and allows for a nice developer API to easily retrieve that data
+description: A nice API that allows for VERY fast alt detection and Essentials-like /seen lookups
 commands:
   ipapireload:
     description: Reloads the plugin

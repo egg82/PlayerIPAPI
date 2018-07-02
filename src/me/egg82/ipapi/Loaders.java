@@ -64,7 +64,7 @@ public class Loaders {
 					configRegistry.hasRegister("sql.sqlite.file")
 				) {
 					sql = new SQLite(threads, plugin.getName(), plugin.getClass().getClassLoader());
-					sql.connect(new File(plugin.getDataFolder(), configRegistry.getRegister("sqlite.file", String.class)).getAbsolutePath());
+					sql.connect(new File(plugin.getDataFolder(), configRegistry.getRegister("sql.sqlite.file", String.class)).getAbsolutePath());
 					ServiceLocator.provideService(sql);
 					new CreateTablesSQLiteCommand().start();
 				} else {
@@ -90,8 +90,14 @@ public class Loaders {
 					&& configRegistry.hasRegister("redis.port")
 				) {
 					JedisPoolConfig redisPoolConfig = new JedisPoolConfig();
-					redisPoolConfig.setMaxTotal(128);
+					redisPoolConfig.setMaxTotal(16);
+					redisPoolConfig.setMaxIdle(2);
 					redisPoolConfig.setBlockWhenExhausted(false);
+					redisPoolConfig.setTestOnBorrow(false);
+					redisPoolConfig.setTestOnCreate(false);
+					redisPoolConfig.setTestOnReturn(false);
+					redisPoolConfig.setTestWhileIdle(true);
+					redisPoolConfig.setMaxWaitMillis(30000L);
 					JedisPool redisPool = new JedisPool(
 						redisPoolConfig,
 						configRegistry.getRegister("redis.address", String.class),
