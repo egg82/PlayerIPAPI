@@ -4,7 +4,7 @@
   <groupId>ninja.egg82.plugins</groupId>
   <artifactId>PlayerIPAPI</artifactId>
   <name>PlayerIPAPI</name>
-  <version>1.2.8</version>
+  <version>1.2.9</version>
   <description>PlayerIPAPI for Bukkit/Spigot</description>
   <url>https://www.egg82.ninja</url>
   <build>

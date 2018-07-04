@@ -19,13 +19,17 @@ import me.egg82.ipapi.core.UUIDData;
 import me.egg82.ipapi.core.UUIDEventArgs;
 import me.egg82.ipapi.registries.IPToPlayerRegistry;
 import me.egg82.ipapi.registries.PlayerToIPRegistry;
-import me.egg82.ipapi.sql.SelectIpsCommand;
-import me.egg82.ipapi.sql.SelectUuidsCommand;
+import me.egg82.ipapi.sql.mysql.SelectIPsMySQLCommand;
+import me.egg82.ipapi.sql.mysql.SelectUUIDsMySQLCommand;
+import me.egg82.ipapi.sql.sqlite.SelectIPsSQLiteCommand;
+import me.egg82.ipapi.sql.sqlite.SelectUUIDsSQLiteCommand;
 import me.egg82.ipapi.utils.RedisUtil;
 import me.egg82.ipapi.utils.ValidationUtil;
+import ninja.egg82.enums.BaseSQLType;
 import ninja.egg82.exceptionHandlers.IExceptionHandler;
 import ninja.egg82.patterns.ServiceLocator;
 import ninja.egg82.patterns.registries.IExpiringRegistry;
+import ninja.egg82.sql.ISQL;
 import redis.clients.jedis.Jedis;
 
 public class IPLookupAPI {
@@ -116,12 +120,29 @@ public class IPLookupAPI {
 		
 		BiConsumer<Object, IPEventArgs> sqlData = (s, e) -> {
 			retVal.set(e.getIpData());
+			
+			ISQL sql = ServiceLocator.getService(ISQL.class);
+			if (sql.getType() == BaseSQLType.MySQL) {
+				SelectIPsMySQLCommand c = (SelectIPsMySQLCommand) s;
+				c.onData().detatchAll();
+			} else if (sql.getType() == BaseSQLType.SQLite) {
+				SelectIPsSQLiteCommand c = (SelectIPsSQLiteCommand) s;
+				c.onData().detatchAll();
+			}
+			
 			latch.countDown();
 		};
 		
-		SelectIpsCommand command = new SelectIpsCommand(playerUuid);
-		command.onData().attach(sqlData);
-		command.start();
+		ISQL sql = ServiceLocator.getService(ISQL.class);
+		if (sql.getType() == BaseSQLType.MySQL) {
+			SelectIPsMySQLCommand command = new SelectIPsMySQLCommand(playerUuid);
+			command.onData().attach(sqlData);
+			command.start();
+		} else if (sql.getType() == BaseSQLType.SQLite) {
+			SelectIPsSQLiteCommand command = new SelectIPsSQLiteCommand(playerUuid);
+			command.onData().attach(sqlData);
+			command.start();
+		}
 		
 		try {
 			latch.await();
@@ -129,8 +150,6 @@ public class IPLookupAPI {
 			ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
 			ex.printStackTrace();
 		}
-		
-		command.onData().detatch(sqlData);
 		
 		if (retVal.get() == null) {
 			// Something went wrong. Don't cache this
@@ -240,12 +259,29 @@ public class IPLookupAPI {
 		
 		BiConsumer<Object, UUIDEventArgs> sqlData = (s, e) -> {
 			retVal.set(e.getUuidData());
+			
+			ISQL sql = ServiceLocator.getService(ISQL.class);
+			if (sql.getType() == BaseSQLType.MySQL) {
+				SelectUUIDsMySQLCommand c = (SelectUUIDsMySQLCommand) s;
+				c.onData().detatchAll();
+			} else if (sql.getType() == BaseSQLType.SQLite) {
+				SelectUUIDsSQLiteCommand c = (SelectUUIDsSQLiteCommand) s;
+				c.onData().detatchAll();
+			}
+			
 			latch.countDown();
 		};
 		
-		SelectUuidsCommand command = new SelectUuidsCommand(ip);
-		command.onData().attach(sqlData);
-		command.start();
+		ISQL sql = ServiceLocator.getService(ISQL.class);
+		if (sql.getType() == BaseSQLType.MySQL) {
+			SelectUUIDsMySQLCommand command = new SelectUUIDsMySQLCommand(ip);
+			command.onData().attach(sqlData);
+			command.start();
+		} else if (sql.getType() == BaseSQLType.SQLite) {
+			SelectUUIDsSQLiteCommand command = new SelectUUIDsSQLiteCommand(ip);
+			command.onData().attach(sqlData);
+			command.start();
+		}
 		
 		try {
 			latch.await();
@@ -253,8 +289,6 @@ public class IPLookupAPI {
 			ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
 			ex.printStackTrace();
 		}
-		
-		command.onData().detatch(sqlData);
 		
 		if (retVal.get() == null) {
 			// Something went wrong. Don't cache this

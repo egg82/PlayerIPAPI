@@ -4,9 +4,10 @@ import java.io.File;
 
 import org.bukkit.Bukkit;
 
-import me.egg82.ipapi.sql.LoadInfoCommand;
 import me.egg82.ipapi.sql.mysql.CreateTablesMySQLCommand;
+import me.egg82.ipapi.sql.mysql.LoadInfoMySQLCommand;
 import me.egg82.ipapi.sql.sqlite.CreateTablesSQLiteCommand;
+import me.egg82.ipapi.sql.sqlite.LoadInfoSQLiteCommand;
 import ninja.egg82.bukkit.BasePlugin;
 import ninja.egg82.bukkit.messaging.EnhancedBungeeMessageHandler;
 import ninja.egg82.bukkit.services.ConfigRegistry;
@@ -56,6 +57,7 @@ public class Loaders {
 					);
 					ServiceLocator.provideService(sql);
 					new CreateTablesMySQLCommand().start();
+					new LoadInfoMySQLCommand().start();
 				} else {
 					throw new RuntimeException("\"sql.mysql.address\", \"sql.mysql.port\", \"sql.mysql.user\", or \"sql.mysql.database\" missing from config. Aborting plugin load.");
 				}
@@ -67,6 +69,7 @@ public class Loaders {
 					sql.connect(new File(plugin.getDataFolder(), configRegistry.getRegister("sql.sqlite.file", String.class)).getAbsolutePath());
 					ServiceLocator.provideService(sql);
 					new CreateTablesSQLiteCommand().start();
+					new LoadInfoSQLiteCommand().start();
 				} else {
 					throw new RuntimeException("\"sql.sqlite.file\" missing from config. Aborting plugin load.");
 				}
@@ -76,8 +79,6 @@ public class Loaders {
 		} else {
 			throw new RuntimeException("\"sql.type\" or \"sql.threads\" missing from config. Aborting plugin load.");
 		}
-		
-		new LoadInfoCommand().start();
 	}
 	@SuppressWarnings("resource")
 	public static void loadRedis() {

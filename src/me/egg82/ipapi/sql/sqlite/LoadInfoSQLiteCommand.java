@@ -1,85 +1,97 @@
-package me.egg82.ipapi.sql;
+package me.egg82.ipapi.sql.sqlite;
 
 import java.sql.Timestamp;
-import java.util.HashSet;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 
-import me.egg82.ipapi.core.IPData;
-import me.egg82.ipapi.core.IPEventArgs;
+import org.json.simple.JSONObject;
+
 import me.egg82.ipapi.utils.RedisUtil;
 import me.egg82.ipapi.utils.ValidationUtil;
 import ninja.egg82.events.SQLEventArgs;
 import ninja.egg82.exceptionHandlers.IExceptionHandler;
 import ninja.egg82.patterns.ServiceLocator;
-import ninja.egg82.patterns.events.EventHandler;
 import ninja.egg82.patterns.Command;
 import ninja.egg82.sql.ISQL;
 import redis.clients.jedis.Jedis;
 
-public class SelectIpsCommand extends Command {
+public class LoadInfoSQLiteCommand extends Command {
 	//vars
 	private ISQL sql = ServiceLocator.getService(ISQL.class);
 	
 	private UUID query = null;
 	
-	private UUID uuid = null;
-	
 	private BiConsumer<Object, SQLEventArgs> sqlError = (s, e) -> onSQLError(e);
 	private BiConsumer<Object, SQLEventArgs> sqlData = (s, e) -> onSQLData(e);
 	
-	private EventHandler<IPEventArgs> onData = new EventHandler<IPEventArgs>();
-	
 	//constructor
-	public SelectIpsCommand(UUID uuid) {
+	public LoadInfoSQLiteCommand() {
 		super();
-		
-		this.uuid = uuid;
 		
 		sql.onError().attach(sqlError);
 		sql.onData().attach(sqlData);
 	}
 	
 	//public
-	public EventHandler<IPEventArgs> onData() {
-		return onData;
-	}
 	
 	//private
 	protected void onExecute(long elapsedMilliseconds) {
-		query = sql.parallelQuery("SELECT `ip`, `created`, `updated` FROM `playeripapi` WHERE `uuid`=?;", uuid.toString());
+		query = sql.parallelQuery("SELECT `uuid`, `ip`, `created`, `updated` FROM `playeripapi`;");
 	}
 	
+	@SuppressWarnings("unchecked")
 	private void onSQLData(SQLEventArgs e) {
 		if (e.getUuid().equals(query)) {
 			Exception lastEx = null;
 			
-			Set<IPData> retVal = new HashSet<IPData>();
 			try (Jedis redis = RedisUtil.getRedis()) {
 				// Iterate rows
 				for (Object[] o : e.getData().data) {
 					try {
-						// Validate IP and remove bad data
-						if (!ValidationUtil.isValidIp((String) o[0])) {
+						// Validate UUID/IP and remove bad data
+						if (!ValidationUtil.isValidUuid((String) o[0])) {
 							if (redis != null) {
-								String ipKey = "pipapi:ip:" + (String) o[0];
-								String infoKey = "pipapi:info:" + uuid.toString() + ":" + (String) o[0];
+								String uuidKey = "pipapi:uuid:" + (String) o[0];
+								String infoKey = "pipapi:info:" + (String) o[0] + ":" + (String) o[1];
+								redis.del(uuidKey);
+								redis.del(infoKey);
+							}
+							sql.parallelQuery("DELETE FROM `playeripapi` WHERE `uuid`=? AND `ip`=?;", o[0], o[1]);
+							
+							continue;
+						}
+						if (!ValidationUtil.isValidIp((String) o[1])) {
+							if (redis != null) {
+								String ipKey = "pipapi:ip:" + (String) o[1];
+								String infoKey = "pipapi:info:" + (String) o[0] + ":" + (String) o[1];
 								redis.del(ipKey);
 								redis.del(infoKey);
 							}
-							sql.parallelQuery("DELETE FROM `playeripapi` WHERE `uuid`=? AND `ip`=?;", uuid.toString(), o[0]);
+							sql.parallelQuery("DELETE FROM `playeripapi` WHERE `uuid`=? AND `ip`=?;", o[0], o[1]);
 							
 							continue;
 						}
 						
 						// Grab all data and convert to more useful object types
-						String ip = (String) o[0];
-						long created = ((Timestamp) o[1]).getTime();
-						long updated = ((Timestamp) o[2]).getTime();
+						UUID uuid = UUID.fromString((String) o[0]);
+						String ip = (String) o[1];
+						long created = Timestamp.valueOf((String) o[2]).getTime();
+						long updated = Timestamp.valueOf((String) o[3]).getTime();
 						
-						// Add new data
-						retVal.add(new IPData(ip, created, updated));
+						// Set Redis, if available
+						if (redis != null) {
+							String uuidKey = "pipapi:uuid:" + uuid.toString();
+							redis.sadd(uuidKey, ip);
+							
+							String ipKey = "pipapi:ip:" + ip;
+							redis.sadd(ipKey, uuid.toString());
+							
+							String infoKey = "pipapi:info:" + uuid.toString() + ":" + ip;
+							JSONObject infoObject = new JSONObject();
+							infoObject.put("created", Long.valueOf(created));
+							infoObject.put("updated", Long.valueOf(updated));
+							redis.set(infoKey, infoObject.toJSONString());
+						}
 					} catch (Exception ex) {
 						ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
 						ex.printStackTrace();
@@ -90,8 +102,6 @@ public class SelectIpsCommand extends Command {
 			
 			sql.onError().detatch(sqlError);
 			sql.onData().detatch(sqlError);
-			
-			onData.invoke(this, new IPEventArgs(uuid, retVal));
 			
 			if (lastEx != null) {
 				throw new RuntimeException(lastEx);
@@ -109,8 +119,6 @@ public class SelectIpsCommand extends Command {
 		
 		sql.onError().detatch(sqlError);
 		sql.onData().detatch(sqlError);
-		
-		onData.invoke(this, new IPEventArgs(uuid, new HashSet<IPData>()));
 		
 		throw new RuntimeException(e.getSQLError().ex);
 	}
