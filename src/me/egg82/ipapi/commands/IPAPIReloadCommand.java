@@ -34,6 +34,7 @@ public class IPAPIReloadCommand extends CommandHandler {
 	//public
 	
 	//private
+	@SuppressWarnings("resource")
 	protected void onExecute(long elapsedMilliseconds) {
 		if (args.length != 0) {
 			sender.sendMessage(ChatColor.RED + "Incorrect command usage!");

@@ -9,7 +9,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
 import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
 
 import me.egg82.ipapi.core.IPData;
 import me.egg82.ipapi.core.UUIDData;
@@ -29,7 +28,6 @@ import redis.clients.jedis.Jedis;
 
 public class PlayerCacheUtil {
 	//vars
-	private static JSONParser parser = new JSONParser();
 	
 	//constructor
 	public PlayerCacheUtil() {
@@ -133,10 +131,11 @@ public class PlayerCacheUtil {
 					redis.set(infoKey, infoObject.toJSONString());
 				} else {
 					try {
-						JSONObject infoObject = (JSONObject) parser.parse(info);
+						JSONObject infoObject = JSONUtil.parseObject(info);
 						infoObject.put("updated", time);
 						redis.set(infoKey, infoObject.toJSONString());
 					} catch (Exception ex) {
+						redis.del(infoKey);
 						ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
 						ex.printStackTrace();
 					}

@@ -9,7 +9,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 
 import org.json.simple.JSONObject;
-import org.json.simple.parser.JSONParser;
 
 import com.google.common.collect.ImmutableSet;
 
@@ -23,6 +22,7 @@ import me.egg82.ipapi.sql.mysql.SelectIPsMySQLCommand;
 import me.egg82.ipapi.sql.mysql.SelectUUIDsMySQLCommand;
 import me.egg82.ipapi.sql.sqlite.SelectIPsSQLiteCommand;
 import me.egg82.ipapi.sql.sqlite.SelectUUIDsSQLiteCommand;
+import me.egg82.ipapi.utils.JSONUtil;
 import me.egg82.ipapi.utils.RedisUtil;
 import me.egg82.ipapi.utils.ValidationUtil;
 import ninja.egg82.enums.BaseSQLType;
@@ -34,7 +34,6 @@ import redis.clients.jedis.Jedis;
 
 public class IPLookupAPI {
 	//vars
-	private static JSONParser parser = new JSONParser();
 	
 	//constructor
 	public IPLookupAPI() {
@@ -89,13 +88,14 @@ public class IPLookupAPI {
 					}
 					
 					try {
-						JSONObject infoObject = (JSONObject) parser.parse(jsonData);
+						JSONObject infoObject = JSONUtil.parseObject(jsonData);
 						long created = ((Number) infoObject.get("created")).longValue();
 						long updated = ((Number) infoObject.get("updated")).longValue();
 						
 						// Add the data
 						ips.add(new IPData(ip, created, updated));
 					} catch (Exception ex) {
+						redis.del(infoKey);
 						ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
 						ex.printStackTrace();
 					}
@@ -228,13 +228,14 @@ public class IPLookupAPI {
 					
 					// Parse info into more useful object types
 					try {
-						JSONObject infoObject = (JSONObject) parser.parse(jsonData);
+						JSONObject infoObject = JSONUtil.parseObject(jsonData);
 						long created = ((Number) infoObject.get("created")).longValue();
 						long updated = ((Number) infoObject.get("updated")).longValue();
 						
 						// Add the data
 						uuids.add(new UUIDData(UUID.fromString(uuid), created, updated));
 					} catch (Exception ex) {
+						redis.del(infoKey);
 						ServiceLocator.getService(IExceptionHandler.class).silentException(ex);
 						ex.printStackTrace();
 					}

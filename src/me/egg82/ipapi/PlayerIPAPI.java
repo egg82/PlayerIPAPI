@@ -111,6 +111,7 @@ public class PlayerIPAPI extends BasePlugin {
 		ThreadUtil.schedule(checkExceptionLimitReached, 60L * 60L * 1000L);
 		ThreadUtil.schedule(onFetchQueueThread, 10L * 1000L);
 	}
+	@SuppressWarnings("resource")
 	public void onDisable() {
 		super.onDisable();
 		
