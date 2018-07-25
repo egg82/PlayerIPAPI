@@ -56,6 +56,13 @@
 					<exclude>org/yaml/**</exclude>
                   </excludes>
                 </filter>
+                <filter>
+                  <!-- 1.11 compatibility -->
+                  <artifact>ninja.egg82.lib:*</artifact>
+                  <excludes>
+                    <exclude>org/reflections/**</exclude>
+                  </excludes>
+                </filter>
               </filters>
               <minimizeJar>false</minimizeJar>
               <relocations>
@@ -103,12 +110,17 @@
                   <shadedPattern>me.egg82.ipapi.extern.net.jodah</shadedPattern>
                 </relocation>
                 <relocation>
+                  <!-- 1.11 compatibility -->
+                  <pattern>net.jcip</pattern>
+                  <shadedPattern>me.egg82.ipapi.extern.net.jcip</shadedPattern>
+                </relocation>
+                <relocation>
                   <pattern>ninja.egg82</pattern>
                   <shadedPattern>me.egg82.ipapi.lib.ninja.egg82</shadedPattern>
                 </relocation>
                 <relocation>
                   <pattern>ninja.leaping</pattern>
-                  <shadedPattern>me.egg82.ipapi.lib.ninja.leaping</shadedPattern>
+                  <shadedPattern>me.egg82.ipapi.extern.ninja.leaping</shadedPattern>
                 </relocation>
                 <relocation>
                   <pattern>org.apache.commons</pattern>
@@ -158,6 +170,10 @@
       <id>egg82-ninja</id>
       <url>https://www.myget.org/F/egg82-java/maven/</url>
     </repository>
+    <repository>
+      <id>sponge</id>
+      <url>https://repo.spongepowered.org/maven/</url>
+    </repository>
   </repositories>
   <dependencies>
     <!-- <dependency>
@@ -175,22 +191,22 @@
     <dependency>
       <groupId>ninja.egg82.lib</groupId>
       <artifactId>bukkit-1.12</artifactId>
-      <version>1.1.11</version>
+      <version>1.1.12</version>
     </dependency>
     <dependency>
       <groupId>ninja.egg82.lib</groupId>
       <artifactId>bukkit-1.13</artifactId>
-      <version>1.1.11</version>
+      <version>1.1.12</version>
     </dependency>
     <dependency>
       <groupId>ninja.egg82.lib</groupId>
       <artifactId>plugin-common</artifactId>
-      <version>1.0.7</version>
+      <version>1.0.8</version>
     </dependency>
     <dependency>
-      <groupId>ninja.leaping.configurate</groupId>
+      <groupId>org.spongepowered</groupId>
       <artifactId>configurate-yaml</artifactId>
-      <version>3.3</version>
+      <version>3.5</version>
     </dependency>
     <dependency>
       <groupId>ninja.egg82.lib</groupId>
@@ -259,6 +275,12 @@
       <artifactId>guava</artifactId>
       <version>25.1-jre</version>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <!-- 1.11 compatibility -->
+      <groupId>org.reflections</groupId>
+      <artifactId>reflections</artifactId>
+      <version>0.9.10</version>
     </dependency>
   </dependencies>
   <description>PlayerIPAPI for Bukkit/Spigot</description>

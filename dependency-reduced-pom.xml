@@ -59,6 +59,12 @@
                     <exclude>org/yaml/**</exclude>
                   </excludes>
                 </filter>
+                <filter>
+                  <artifact>ninja.egg82.lib:*</artifact>
+                  <excludes>
+                    <exclude>org/reflections/**</exclude>
+                  </excludes>
+                </filter>
               </filters>
               <minimizeJar>false</minimizeJar>
               <relocations>
@@ -106,12 +112,16 @@
                   <shadedPattern>me.egg82.ipapi.extern.net.jodah</shadedPattern>
                 </relocation>
                 <relocation>
+                  <pattern>net.jcip</pattern>
+                  <shadedPattern>me.egg82.ipapi.extern.net.jcip</shadedPattern>
+                </relocation>
+                <relocation>
                   <pattern>ninja.egg82</pattern>
                   <shadedPattern>me.egg82.ipapi.lib.ninja.egg82</shadedPattern>
                 </relocation>
                 <relocation>
                   <pattern>ninja.leaping</pattern>
-                  <shadedPattern>me.egg82.ipapi.lib.ninja.leaping</shadedPattern>
+                  <shadedPattern>me.egg82.ipapi.extern.ninja.leaping</shadedPattern>
                 </relocation>
                 <relocation>
                   <pattern>org.apache.commons</pattern>
@@ -161,6 +171,10 @@
       <id>egg82-ninja</id>
       <url>https://www.myget.org/F/egg82-java/maven/</url>
     </repository>
+    <repository>
+      <id>sponge</id>
+      <url>https://repo.spongepowered.org/maven/</url>
+    </repository>
   </repositories>
   <dependencies>
     <dependency>
@@ -206,10 +220,6 @@
         <exclusion>
           <artifactId>jsr305</artifactId>
           <groupId>com.google.code.findbugs</groupId>
-        </exclusion>
-        <exclusion>
-          <artifactId>checker-qual</artifactId>
-          <groupId>org.checkerframework</groupId>
         </exclusion>
         <exclusion>
           <artifactId>error_prone_annotations</artifactId>
