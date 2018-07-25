@@ -26,6 +26,10 @@ public class PlayerChannelUtil {
 			throw new IllegalArgumentException("ip cannot be null.");
 		}
 		
+		if (ServiceLocator.getService(IExceptionHandler.class) == null) {
+			return;
+		}
+		
 		ByteArrayOutputStream stream = new ByteArrayOutputStream();
 		DataOutputStream out = new DataOutputStream(stream);
 		
@@ -40,7 +44,7 @@ public class PlayerChannelUtil {
 			return;
 		}
 		
-		ChannelUtil.broadcastToServers("IPAPIPlayerInfo", stream.toByteArray());
+		ChannelUtil.broadcastToServers("ip-api-player-info", stream.toByteArray());
 	}
 	
 	//private

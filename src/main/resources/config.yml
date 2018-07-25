@@ -42,4 +42,7 @@ rabbit:
 
 # The amount of time before in-memory caches expire after non-use
 # This prevents many sequential lookups from using more expensive networking constantly
-cacheTime: 1minute
+cacheTime: '1minute'
+
+# Config version, no touchy plz
+version: 2.0

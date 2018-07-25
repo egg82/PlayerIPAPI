@@ -24,7 +24,7 @@ public class PlayerInfoMessage extends AsyncMessageHandler {
 	//private
 	@SuppressWarnings("resource")
 	protected void onExecute(long elapsedMilliseconds) {
-		if (!channelName.equals("IPAPIPlayerInfo")) {
+		if (!channelName.equals("ip-api-player-info")) {
 			return;
 		}
 		

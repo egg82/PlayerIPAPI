@@ -1,5 +1,10 @@
 package me.egg82.ipapi.commands;
 
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.InputStreamReader;
 import java.util.List;
 
 import org.bukkit.Bukkit;
@@ -7,19 +12,23 @@ import org.bukkit.ChatColor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.plugin.Plugin;
 
+import me.egg82.ipapi.Configuration;
 import me.egg82.ipapi.Loaders;
 import me.egg82.ipapi.core.RedisSubscriber;
 import me.egg82.ipapi.registries.IPToPlayerRegistry;
 import me.egg82.ipapi.registries.PlayerToIPRegistry;
 import me.egg82.ipapi.utils.RedisUtil;
-import ninja.egg82.bukkit.services.ConfigRegistry;
-import ninja.egg82.bukkit.utils.YamlUtil;
+import ninja.egg82.bukkit.BasePlugin;
 import ninja.egg82.patterns.ServiceLocator;
+import ninja.egg82.plugin.enums.SenderType;
 import ninja.egg82.plugin.handlers.CommandHandler;
 import ninja.egg82.plugin.messaging.IMessageHandler;
+import ninja.egg82.plugin.utils.DirectoryUtil;
 import ninja.egg82.sql.ISQL;
-import ninja.egg82.utils.FileUtil;
 import ninja.egg82.utils.ThreadUtil;
+import ninja.leaping.configurate.ConfigurationNode;
+import ninja.leaping.configurate.loader.ConfigurationLoader;
+import ninja.leaping.configurate.yaml.YAMLConfigurationLoader;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
@@ -45,7 +54,30 @@ public class IPAPIReloadCommand extends CommandHandler {
 		}
 		
 		// Config
-		ServiceLocator.getService(ConfigRegistry.class).load(YamlUtil.getOrLoadDefaults(ServiceLocator.getService(Plugin.class).getDataFolder().getAbsolutePath() + FileUtil.DIRECTORY_SEPARATOR_CHAR + "config.yml", "config.yml", true));
+		File configFile = new File(ServiceLocator.getService(Plugin.class).getDataFolder(), "config.yml");
+		if (configFile.exists() && configFile.isDirectory()) {
+			DirectoryUtil.delete(configFile);
+		}
+		if (!configFile.exists()) {
+			try (InputStreamReader reader = new InputStreamReader(ServiceLocator.getService(Plugin.class).getResource("config.yml")); BufferedReader in = new BufferedReader(reader); FileWriter writer = new FileWriter(configFile); BufferedWriter out = new BufferedWriter(writer)) {
+				while (in.ready()) {
+					writer.write(in.readLine());
+				}
+			} catch (Exception ex) {
+				
+			}
+		}
+		
+		ConfigurationLoader<ConfigurationNode> loader = YAMLConfigurationLoader.builder().setIndent(2).setFile(configFile).build();
+		ConfigurationNode root = null;
+		try {
+			root = loader.load();
+		} catch (Exception ex) {
+			throw new RuntimeException("Error loading config. Aborting plugin load.", ex);
+		}
+		Configuration config = new Configuration(root);
+		ServiceLocator.removeServices(Configuration.class);
+		ServiceLocator.provideService(config);
 		
 		// Memory caches
 		ServiceLocator.removeServices(IPToPlayerRegistry.class);
@@ -81,7 +113,7 @@ public class IPAPIReloadCommand extends CommandHandler {
 			}
 		}
 		
-		Loaders.loadRabbit();
+		Loaders.loadRabbit(ServiceLocator.getService(Plugin.class).getDescription().getName(), Bukkit.getServerName(), ServiceLocator.getService(BasePlugin.class).getServerId(), SenderType.SERVER);
 		
 		if (ServiceLocator.hasService(IMessageHandler.class)) {
 			ServiceLocator.getService(IMessageHandler.class).addHandlersFromPackage("me.egg82.ipapi.messages");
@@ -93,7 +125,7 @@ public class IPAPIReloadCommand extends CommandHandler {
 			sql.disconnect();
 		}
 		
-		Loaders.loadStorage();
+		Loaders.loadStorage(ServiceLocator.getService(Plugin.class).getDescription().getName(), getClass().getClassLoader(), ServiceLocator.getService(Plugin.class).getDataFolder());
 		
 		sender.sendMessage(ChatColor.GREEN + "Configuration reloaded!");
 	}

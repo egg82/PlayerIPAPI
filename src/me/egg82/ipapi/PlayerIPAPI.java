@@ -5,6 +5,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.function.BiConsumer;
 import java.util.logging.Level;
 
+import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 
 import me.egg82.ipapi.core.RedisSubscriber;
@@ -13,8 +14,6 @@ import me.egg82.ipapi.utils.RedisUtil;
 import ninja.egg82.bukkit.BasePlugin;
 import ninja.egg82.bukkit.processors.CommandProcessor;
 import ninja.egg82.bukkit.processors.EventProcessor;
-import ninja.egg82.bukkit.services.ConfigRegistry;
-import ninja.egg82.bukkit.utils.YamlUtil;
 import ninja.egg82.events.CompleteEventArgs;
 import ninja.egg82.exceptionHandlers.GameAnalyticsExceptionHandler;
 import ninja.egg82.exceptionHandlers.IExceptionHandler;
@@ -22,10 +21,10 @@ import ninja.egg82.exceptionHandlers.RollbarExceptionHandler;
 import ninja.egg82.exceptionHandlers.builders.GameAnalyticsBuilder;
 import ninja.egg82.exceptionHandlers.builders.RollbarBuilder;
 import ninja.egg82.patterns.ServiceLocator;
+import ninja.egg82.plugin.enums.SenderType;
 import ninja.egg82.plugin.messaging.IMessageHandler;
 import ninja.egg82.plugin.utils.PluginReflectUtil;
 import ninja.egg82.sql.ISQL;
-import ninja.egg82.utils.FileUtil;
 import ninja.egg82.utils.ThreadUtil;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
@@ -69,7 +68,7 @@ public class PlayerIPAPI extends BasePlugin {
 		PluginReflectUtil.addServicesFromPackage("me.egg82.ipapi.registries", true);
 		PluginReflectUtil.addServicesFromPackage("me.egg82.ipapi.lists", true);
 		
-		ServiceLocator.getService(ConfigRegistry.class).load(YamlUtil.getOrLoadDefaults(getDataFolder().getAbsolutePath() + FileUtil.DIRECTORY_SEPARATOR_CHAR + "config.yml", "config.yml", true));
+		ConfigLoader.getConfig("config.yml", "config.yml");
 	}
 	
 	public void onEnable() {
@@ -85,8 +84,8 @@ public class PlayerIPAPI extends BasePlugin {
 		}
 		
 		Loaders.loadRedis();
-		Loaders.loadRabbit();
-		Loaders.loadStorage();
+		Loaders.loadRabbit(getDescription().getName(), Bukkit.getServerName(), getServerId(), SenderType.SERVER);
+		Loaders.loadStorage(getDescription().getName(), getClass().getClassLoader(), getDataFolder());
 		
 		numCommands = ServiceLocator.getService(CommandProcessor.class).addHandlersFromPackage("me.egg82.ipapi.commands", PluginReflectUtil.getCommandMapFromPackage("me.egg82.ipapi.commands", false, null, "Command"), false);
 		numEvents = ServiceLocator.getService(EventProcessor.class).addHandlersFromPackage("me.egg82.ipapi.events");
@@ -185,11 +184,11 @@ public class PlayerIPAPI extends BasePlugin {
 	};
 	
 	private void enableMessage() {
-		printInfo(ChatColor.AQUA + "PlayerIPAPI enabled.");
-		printInfo(ChatColor.GREEN + "[Version " + getDescription().getVersion() + "] " + ChatColor.RED + numCommands + " commands " + ChatColor.LIGHT_PURPLE + numEvents + " events " + ChatColor.YELLOW + numTicks + " tick handlers " + ChatColor.BLUE + numMessages + " message handlers");
-		printInfo(ChatColor.WHITE + "[PlayerIPAPI] " + ChatColor.GRAY + "Attempting to load compatibility with Bukkit version " + getGameVersion());
+		printInfo(ChatColor.GREEN + "Enabled.");
+		printInfo(ChatColor.AQUA + "[Version " + getDescription().getVersion() + "] " + ChatColor.DARK_GREEN + numCommands + " commands " + ChatColor.LIGHT_PURPLE + numEvents + " events " + ChatColor.GOLD + numTicks + " tick handlers " + ChatColor.BLUE + numMessages + " message handlers");
+		printInfo("Attempting to load compatibility with Bukkit version " + getGameVersion());
 	}
 	private void disableMessage() {
-		printInfo(ChatColor.GREEN + "--== " + ChatColor.LIGHT_PURPLE + "PlayerIPAPI Disabled" + ChatColor.GREEN + " ==--");
+		printInfo(ChatColor.RED + "Disabled");
 	}
 }
