@@ -22,13 +22,13 @@ import me.egg82.ipapi.sql.mysql.SelectIPsMySQLCommand;
 import me.egg82.ipapi.sql.mysql.SelectUUIDsMySQLCommand;
 import me.egg82.ipapi.sql.sqlite.SelectIPsSQLiteCommand;
 import me.egg82.ipapi.sql.sqlite.SelectUUIDsSQLiteCommand;
-import me.egg82.ipapi.utils.JSONUtil;
 import me.egg82.ipapi.utils.RedisUtil;
 import me.egg82.ipapi.utils.ValidationUtil;
 import ninja.egg82.enums.BaseSQLType;
 import ninja.egg82.exceptionHandlers.IExceptionHandler;
 import ninja.egg82.patterns.ServiceLocator;
 import ninja.egg82.patterns.registries.IExpiringRegistry;
+import ninja.egg82.plugin.utils.JSONUtil;
 import ninja.egg82.sql.ISQL;
 import redis.clients.jedis.Jedis;
 

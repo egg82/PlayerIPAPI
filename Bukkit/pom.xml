@@ -1,12 +1,8 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>ninja.egg82.plugins</groupId>
-  <artifactId>PlayerIPAPI</artifactId>
+  <artifactId>PlayerIPAPI-Bukkit</artifactId>
+  <version>1.2.13</version>
   <name>PlayerIPAPI</name>
-  <version>1.2.12</version>
-  <description>PlayerIPAPI for Bukkit/Spigot</description>
-  <url>https://www.egg82.ninja</url>
   <build>
     <sourceDirectory>src</sourceDirectory>
     <plugins>
@@ -19,6 +15,7 @@
         </configuration>
       </plugin>
       <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <version>3.1.0</version>
         <executions>
@@ -29,10 +26,10 @@
             </goals>
             <configuration>
               <transformers>
-                <transformer>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                   <resource>META-INF/services/java.sql.Driver</resource>
                 </transformer>
-                <transformer />
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
               </transformers>
               <filters>
                 <filter>
@@ -45,21 +42,22 @@
                     <exclude>**/*.txt</exclude>
                     <exclude>junit/**</exclude>
                     <exclude>org/junit/**</exclude>
-                    <exclude>org/hamcrest/**</exclude>
-                    <exclude>edu/umd/cs/findbugs/**</exclude>
+					<exclude>org/hamcrest/**</exclude>
+					<exclude>edu/umd/cs/findbugs/**</exclude>
                     <exclude>org/checkerframework/**</exclude>
                     <exclude>afu/**</exclude>
                     <exclude>org/codehaus/mojo/animal_sniffer/**</exclude>
                     <exclude>com/google/common/**</exclude>
-                    <exclude>org/apache/commons/codec/**</exclude>
-                    <exclude>org/apache/commons/io/**</exclude>
-                    <exclude>org/apache/commons/lang/**</exclude>
-                    <exclude>org/apache/commons/lang3/**</exclude>
-                    <exclude>org/json/simple/**</exclude>
-                    <exclude>org/yaml/**</exclude>
+					<exclude>org/apache/commons/codec/**</exclude>
+					<exclude>org/apache/commons/io/**</exclude>
+					<exclude>org/apache/commons/lang/**</exclude>
+					<exclude>org/apache/commons/lang3/**</exclude>
+					<exclude>org/json/simple/**</exclude>
+					<exclude>org/yaml/**</exclude>
                   </excludes>
                 </filter>
                 <filter>
+                  <!-- 1.11 compatibility -->
                   <artifact>ninja.egg82.lib:*</artifact>
                   <excludes>
                     <exclude>org/reflections/**</exclude>
@@ -112,6 +110,7 @@
                   <shadedPattern>me.egg82.ipapi.extern.net.jodah</shadedPattern>
                 </relocation>
                 <relocation>
+                  <!-- 1.11 compatibility -->
                   <pattern>net.jcip</pattern>
                   <shadedPattern>me.egg82.ipapi.extern.net.jcip</shadedPattern>
                 </relocation>
@@ -177,33 +176,93 @@
     </repository>
   </repositories>
   <dependencies>
+    <!-- <dependency>
+      <groupId>org.bukkit</groupId>
+      <artifactId>bukkit</artifactId>
+      <version>1.12.2-R0.1-SNAPSHOT</version>
+      <scope>provided</scope>
+    </dependency> -->
     <dependency>
       <groupId>org.bukkit</groupId>
       <artifactId>bukkit</artifactId>
       <version>1.13-pre5-R0.1-SNAPSHOT</version>
       <scope>provided</scope>
-      <exclusions>
-        <exclusion>
-          <artifactId>commons-lang</artifactId>
-          <groupId>commons-lang</groupId>
-        </exclusion>
-        <exclusion>
-          <artifactId>gson</artifactId>
-          <groupId>com.google.code.gson</groupId>
-        </exclusion>
-      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>ninja.egg82.lib</groupId>
+      <artifactId>bukkit-1.12</artifactId>
+      <version>1.1.14</version>
+    </dependency>
+    <dependency>
+      <groupId>ninja.egg82.lib</groupId>
+      <artifactId>bukkit-1.13</artifactId>
+      <version>1.1.14</version>
+    </dependency>
+    <dependency>
+      <groupId>ninja.egg82.lib</groupId>
+      <artifactId>plugin-common</artifactId>
+      <version>1.0.9</version>
+    </dependency>
+    <dependency>
+      <groupId>org.spongepowered</groupId>
+      <artifactId>configurate-yaml</artifactId>
+      <version>3.5</version>
+    </dependency>
+    <dependency>
+      <groupId>ninja.egg82.lib</groupId>
+      <artifactId>sql-lib</artifactId>
+      <version>2.0.9</version>
+    </dependency>
+    <dependency>
+      <groupId>ninja.egg82.lib</groupId>
+      <artifactId>extended-sql-lib</artifactId>
+      <version>1.0.7</version>
+    </dependency>
+    <dependency>
+      <groupId>ninja.egg82.lib</groupId>
+      <artifactId>exception-lib</artifactId>
+      <version>2.0.8</version>
+    </dependency>
+    <dependency>
+      <groupId>ninja.egg82.lib</groupId>
+      <artifactId>util-lib</artifactId>
+      <version>1.1.2</version>
+    </dependency>
+    <dependency>
+      <groupId>ninja.egg82.lib</groupId>
+      <artifactId>collections-lib</artifactId>
+      <version>1.2.2</version>
+    </dependency>
+    <dependency>
+      <groupId>ninja.egg82.lib</groupId>
+      <artifactId>extended-collections-lib</artifactId>
+      <version>1.0.4</version>
+    </dependency>
+    <dependency>
+      <groupId>ninja.egg82.lib</groupId>
+      <artifactId>service-lib</artifactId>
+      <version>1.0.2</version>
+    </dependency>
+    <dependency>
+      <groupId>ninja.egg82.lib</groupId>
+      <artifactId>threading-lib</artifactId>
+      <version>1.0.3</version>
+    </dependency>
+    <dependency>
+      <groupId>redis.clients</groupId>
+      <artifactId>jedis</artifactId>
+      <version>2.9.0</version>
+    </dependency>
+    <dependency>
+      <groupId>commons-validator</groupId>
+      <artifactId>commons-validator</artifactId>
+      <version>1.6</version>
     </dependency>
     <dependency>
       <groupId>com.googlecode.json-simple</groupId>
       <artifactId>json-simple</artifactId>
       <version>1.1.1</version>
       <scope>provided</scope>
-      <exclusions>
-        <exclusion>
-          <artifactId>junit</artifactId>
-          <groupId>junit</groupId>
-        </exclusion>
-      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.commons</groupId>
@@ -216,25 +275,15 @@
       <artifactId>guava</artifactId>
       <version>25.1-jre</version>
       <scope>provided</scope>
-      <exclusions>
-        <exclusion>
-          <artifactId>jsr305</artifactId>
-          <groupId>com.google.code.findbugs</groupId>
-        </exclusion>
-        <exclusion>
-          <artifactId>error_prone_annotations</artifactId>
-          <groupId>com.google.errorprone</groupId>
-        </exclusion>
-        <exclusion>
-          <artifactId>j2objc-annotations</artifactId>
-          <groupId>com.google.j2objc</groupId>
-        </exclusion>
-        <exclusion>
-          <artifactId>animal-sniffer-annotations</artifactId>
-          <groupId>org.codehaus.mojo</groupId>
-        </exclusion>
-      </exclusions>
+    </dependency>
+    <dependency>
+      <!-- 1.11 compatibility -->
+      <groupId>org.reflections</groupId>
+      <artifactId>reflections</artifactId>
+      <version>0.9.10</version>
     </dependency>
   </dependencies>
+  <description>PlayerIPAPI for Bukkit/Spigot</description>
+  <url>https://www.egg82.ninja</url>
+  <groupId>ninja.egg82.plugins</groupId>
 </project>
-

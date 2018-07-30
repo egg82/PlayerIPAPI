@@ -22,6 +22,7 @@ import ninja.egg82.exceptionHandlers.IExceptionHandler;
 import ninja.egg82.patterns.ServiceLocator;
 import ninja.egg82.patterns.registries.IExpiringRegistry;
 import ninja.egg82.plugin.messaging.IMessageHandler;
+import ninja.egg82.plugin.utils.JSONUtil;
 import ninja.egg82.sql.ISQL;
 import ninja.egg82.utils.ThreadUtil;
 import redis.clients.jedis.Jedis;

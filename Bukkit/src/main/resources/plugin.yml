@@ -1,6 +1,6 @@
 name: PlayerIPAPI
 main: me.egg82.ipapi.PlayerIPAPI
-version: 1.2.12
+version: 1.2.13
 author: egg82
 api-version: 1.13
 description: A nice API that allows for VERY fast alt detection and Essentials-like /seen lookups
