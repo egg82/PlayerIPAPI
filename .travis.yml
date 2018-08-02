@@ -1,1 +1,9 @@
 language: java
+deploy:
+  provider: releases
+  api_key:
+    secure: VRjHwPRhdKZk0jh4kaVizYvvHlam3IRarysLm3rL5gupCYK+wXZay0e8Qud3Sx07yJ+IFOFpa77gHiLWsQo2STHBNCQvB/biVl71KXBNhJSk5tTAiiZS8PmZBMaHzdwRPmgpuXSl1yaMxhynxKCey2A4+nPggCS7SpU1hgADyNh+6wux1UooIHgBzUhO9io8xnn/DvAl0wzUqvwMnCaeAyLXLVOqU/32IDYGIKaQCVbZFDF01F606KsDYSnLNWDuDqS0TcMN8rl/hiPTsK7S3MG6eGFDmqN2ok+P8ds4R5dkM1lGPa5QJ1o7F3suOduJgHbAzuxo4esVfoitl9mvB6fTTxqKPp0RpU4nWg5Ab9CYkPxubsIOQTygl1BX0ybqUnMo1E5ZsY1nZb28xgDeZyLfl9QCUD+8+5vW6j/nXS6/2098VuWqJ/02CEoDuXcKrFgCs6ClhqqSCRAuZkALzwOGaIQHDcGQ7ZKDqnu49ZA7a6PqQtNZNThDB9EaTNOO7GgBArVw2c+VS51XIl2x8nFFUCS+HtoMVh1w0+w7RvI0oxCxfVfvWu6PG91TTpJg62yBy9Y4geJFgB47mehnhg0Gx0CWC3DbwdVGq8h/aTHMI8CWvgnMpxF4rmD7adnGZmYLf4s2wDcWILj9kP/+9y5XhP2j8ip3e+oQe+2o+b4=
+  file-glob: true
+  file: '*/target/PlayerIPAPI-*.jar'
+  on:
+    repo: egg82/PlayerIPAPI
