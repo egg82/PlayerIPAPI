@@ -7,3 +7,10 @@ deploy:
   file: '*/target/PlayerIPAPI-*.jar'
   on:
     repo: egg82/PlayerIPAPI
+addons:
+  sonarcloud:
+    organization: 'egg82-github'
+    token:
+      secure: "gh5F8aQiFt3eoZOTSHYyZfxMornYNcMr47OZ/vVw6phugOxJ4idXKROqkG9HPgtNOWC6SEijLv4wF2MB/TIBkQ4BaDIX4ptGkWm6YVhh/g2g04tLZu0npFKaRpw45GX4ybgIonUSQp1lRg92zG2oLSEBDRaPPyoqE28OUXSE71q1gbeUvrb59ftwASLexed2vOBVqnrsL/M2za7pk03xm3OTOOGydyIMQLauvjxv9qeN5urDUG/ZdUgRWTORit8YaT1zGYGBK4BYRe2qOPB+cJUwr9+biTmjX+r1tQHJGMyNOMPPoMq8aOiWinN24eOD4c+Or1ShCIYbtTiVkJO5jzryXh1zyVNQrzM/S+eBfQcOXZ6KrEriT1v4F0dhOCK5s53jTScOEyVZH8/u2PFloX7bWmCIeBxuQ+rzz8ybem0ZodhbtORp/RiBoIxmkE6PtiuZU2PEDa906jsndhRSVXa0pmNn7uJtqgPFLNqB4juu/erucBQeOFsLXX4FWXwLZiIpUl1YUoFgfaDxzvu6ZnJahVyFt9JKtoCOiQUzjtlQEwyZ1sQ16sClBnhUZMZIN+sSoVzNb23BnskaSiO0efVbo/aRD23lebFE+gM0eEt3at+NtptUTH3/8rX+01CSI21u/cBcDSPc15xFBphZuNBc4AdQEABvB+uWJ0Yong8="
+script:
+  - mvn clean org.jacoco:jacoco-maven-plugin:prepare-agent install sonar:sonar

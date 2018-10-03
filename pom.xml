@@ -11,7 +11,7 @@
   <modules>
     <module>Common</module>
     <module>Bungee</module>
-	<module>Bukkit</module>
+    <module>Bukkit</module>
   </modules>
   <description>PlayerIPAPI parent project</description>
   <url>https://www.egg82.ninja</url>

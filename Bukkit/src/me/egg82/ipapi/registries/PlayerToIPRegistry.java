@@ -12,16 +12,16 @@ import ninja.egg82.patterns.registries.ExpiringRegistry;
 import ninja.egg82.utils.TimeUtil;
 
 public class PlayerToIPRegistry extends ExpiringRegistry<UUID, Set<IPData>> {
-	//vars
-	
-	//constructor
-	@SuppressWarnings("unchecked")
-	public PlayerToIPRegistry() {
-		super(new UUID[0], new Set[0], TimeUtil.getTime(ServiceLocator.getService(Configuration.class).getNode("cacheTime").getString()), TimeUnit.MILLISECONDS, ExpirationPolicy.ACCESSED);
-	}
-	
-	//public
-	
-	//private
-	
+    // vars
+
+    // constructor
+    @SuppressWarnings("unchecked")
+    public PlayerToIPRegistry() {
+        super(new UUID[0], new Set[0], TimeUtil.getTime(ServiceLocator.getService(Configuration.class).getNode("cacheTime").getString()), TimeUnit.MILLISECONDS, ExpirationPolicy.ACCESSED);
+    }
+
+    // public
+
+    // private
+
 }
